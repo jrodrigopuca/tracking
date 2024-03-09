@@ -31,7 +31,6 @@ const checkParamId = () => {
 				const polyline2 = new H.map.Polyline(lineString, {
 					style: { strokeColor: "blue", lineWidth: 3 },
 				});
-				console.log(polyline2);
 				map.addObject(polyline2);
 			}
 			map.setCenter(item.path[0]);
@@ -132,8 +131,8 @@ const stopTracking = () => {
 
 const startTracking = () => {
 	if (navigator.geolocation) {
-    document.getElementById("start-button").style.display = "none";
-    document.getElementById("stop-button").style.display = "block";
+		document.getElementById("start-button").style.display = "none";
+		document.getElementById("stop-button").style.display = "block";
 
 		watchLocation = navigator.geolocation.watchPosition((position) => {
 			// Posición actual
@@ -154,14 +153,49 @@ const startTracking = () => {
 			const timeDifference = currentTime - lastAddedPointTime;
 			const isTimeDifferenceValid = timeDifference >= 10000; // 10 segundos en milisegundos
 
-      if (isNewPoint && isTimeDifferenceValid){
-        lastAddedPointTime = currentTime;
-        path.push(actualPosition);
-        map.addObject(new H.map.Marker(actualPosition));
-        map.setCenter(actualPosition);
-        updateList(actualPosition);
-        updateDistance(actualPosition);
-      }
+			if (isNewPoint && isTimeDifferenceValid) {
+				lastAddedPointTime = currentTime;
+				path.push(actualPosition);
+				map.addObject(new H.map.Marker(actualPosition));
+				map.setCenter(actualPosition);
+				updateList(actualPosition);
+				updateDistance(actualPosition);
+			}
+		});
+	}
+};
+
+const actualTracking = () => {
+	if (navigator.geolocation) {
+		document.getElementById("start-button").style.display = "none";
+		document.getElementById("stop-button").style.display = "block";
+
+		watchLocation = navigator.geolocation.watchPosition((position) => {
+			// Posición actual
+			const actualPosition = {
+				lat: position.coords.latitude,
+				lng: position.coords.longitude,
+			};
+
+			// Verificar si el nuevo punto es igual a alguno de los puntos existentes
+			const isNewPoint = !path.some((point) => {
+				return (
+					point.lat === actualPosition.lat && point.lng === actualPosition.lng
+				);
+			});
+
+			// Verificar si la diferencia de tiempo entre el nuevo punto y el último punto agregado es mayor o igual a 10 segundos
+			const currentTime = new Date().getTime();
+			const timeDifference = currentTime - lastAddedPointTime;
+			const isTimeDifferenceValid = timeDifference >= 10000; // 10 segundos en milisegundos
+
+			if (isNewPoint && isTimeDifferenceValid) {
+				lastAddedPointTime = currentTime;
+				map.addObject(new H.map.Marker(actualPosition));
+				map.setCenter(actualPosition);
+				updateList(actualPosition);
+				updateDistance(actualPosition);
+			}
 		});
 	}
 };
@@ -181,14 +215,16 @@ const exportPath = () => {
 
 const savePath = () => {
 	const actualItems = JSON.parse(localStorage.getItem("routes")) || [];
+	const id = Date.now();
 	const route = {
-		name: "Route-" + Date.now(),
-		id: Date.now(),
+		name: "Route-" + id,
+		id: id,
 		distance: distance,
 		path: path,
 	};
 	actualItems.push(route);
 	localStorage.setItem("routes", JSON.stringify(actualItems));
+	alert("Track saved");
 };
 
 const zoomIn = () => {
@@ -212,3 +248,6 @@ document.getElementById("zoom-in-button").addEventListener("click", zoomIn);
 document.getElementById("zoom-out-button").addEventListener("click", zoomOut);
 document.getElementById("save-button").addEventListener("click", savePath);
 document.getElementById("back-button").addEventListener("click", back);
+document
+	.getElementById("actual-button")
+	.addEventListener("click", actualTracking);

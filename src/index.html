@@ -4,18 +4,16 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Panel de Recorridos</title>
+        <link rel="stylesheet" href="./styles.css">
     </head>
     <body>
         <h1>Panel de Recorridos</h1>
 
-        <button id="add-route-btn">Agregar Recorrido</button>
+        <button id="add-route-btn" class="button">Agregar Recorrido</button>
         <div id="routes-list"></div>
 
-        <style>
-            .list-item{
-                padding: 12px;
-            }
-        </style>
+        <!-- Campo de entrada para subir archivo JSON -->
+        <input type="file" id="fileInput" accept=".json">
         <script>
             // Función para redirigir a la página de seguimiento
             const startTracking = () => {
@@ -23,6 +21,7 @@
             };
 
             const redirectToTrack = (id) => {
+                alert("redirigiendo...");
                 window.location.href = `track.html?id=${id}`;
             };
 
@@ -38,7 +37,7 @@
                     routes.forEach((route, index) => {
                         html += `<li class='list-item'>
                           Recorrido ${index + 1}: ${route.id}
-                          <button onclick="redirectToTrack(${route.id})">Ver</button>
+                          <button class='button' onclick="redirectToTrack(${route.id})">Ver</button>
                         </li>`;
                     });
                     html += "</ul>";
@@ -47,9 +46,33 @@
             };
 
             loadRoutes();
+
+            const addNewRouteByFile = (event)=>{
+                const file = event.target.files[0];
+                const reader = new FileReader();
+                const routes = JSON.parse(localStorage.getItem("routes")) || [];
+                reader.onload = (e)=>{
+                    const jsonData = JSON.parse(e.target.result);
+                    const id= Date.now()
+                    const route = {
+                        name: "Imported-"+ id,
+                        id: id,
+                        distance: 0,
+                        path: jsonData
+                    }
+                    routes.push(route);
+                    localStorage.setItem("routes", JSON.stringify(routes));
+                    loadRoutes();
+                }
+                reader.readAsText(file);
+            }
+
             document
                 .getElementById("add-route-btn")
                 .addEventListener("click", startTracking);
+            document
+                .getElementById("fileInput")
+                .addEventListener("change", addNewRouteByFile)
         </script>
     </body>
 </html>

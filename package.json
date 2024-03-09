@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "start": "parcel --no-cache",
-    "build": "parcel build --public-url ./"
+    "build": "rm -rf dist && rm -rf .parcel-cache && parcel build --public-url ./"
   },
   "author": "jarp",
   "license": "MIT",
