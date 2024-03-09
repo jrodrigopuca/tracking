@@ -1,6 +1,6 @@
 node_modules
 .parcel-cache
-dist/*
+dist
 
 # misc
 .DS_Store
