@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="initial-scale=1.0, width=device-width" />
+        <title>Seguimiento de Recorrido con HERE Maps</title>
+        <script
+            src="https://js.api.here.com/v3/3.1/mapsjs-core.js"
+            type="text/javascript"
+            charset="utf-8"
+        ></script>
+        <script
+            src="https://js.api.here.com/v3/3.1/mapsjs-service.js"
+            type="text/javascript"
+            charset="utf-8"
+        ></script>
+        <script
+            src="https://js.api.here.com/v3/3.1/mapsjs-ui.js"
+            type="text/javascript"
+            charset="utf-8"
+        ></script>
+        <script
+            src="https://js.api.here.com/v3/3.1/mapsjs-mapevents.js"
+            type="text/javascript"
+            charset="utf-8"
+        ></script>
+    </head>
+    <style>
+        #map-container {
+            height: 300px;
+            width: 100%;
+        }
+    </style>
+    <body>
+        <div id="map-container"></div>
+        <button id="start-button">Iniciar</button>
+        <button id="stop-button">Terminar</button>
+        <button id="export-button">Exportar</button>
+        <button id="back-button">Volver</button>
+        <button id="zoom-in-button">+</button>
+        <button id="zoom-out-button">-</button>
+        <button id="save-button">Guardar recorrido</button>
+        <div id="info"></div>
+        <ul id="list"></ul>
+
+        <script src="./track.js" type="module" />
+    </body>
+</html>
