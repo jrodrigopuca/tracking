@@ -37,7 +37,10 @@
                     routes.forEach((route, index) => {
                         html += `<li class='list-item'>
                           Recorrido ${index + 1}: ${route.id}
-                          <button class='button' onclick="redirectToTrack(${route.id})">Ver</button>
+                          <button class='button' onclick="              
+                            alert('redirigiendo...');
+                            window.location.href = 'track.html?id=${route.id}';
+                          ">Ver</button>
                         </li>`;
                     });
                     html += "</ul>";
