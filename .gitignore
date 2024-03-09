@@ -1,3 +1,13 @@
 node_modules
 .parcel-cache
-dist
+dist/*
+
+# misc
+.DS_Store
+.env.local
+.env.development
+.env.production
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
