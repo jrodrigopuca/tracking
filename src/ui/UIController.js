@@ -78,6 +78,18 @@ export class UIController {
 	/** @type {boolean} Si está haciendo tracking activo */
 	#isTrackingActive = false;
 
+	/** @type {boolean} Si el tracking está pausado */
+	#isPaused = false;
+
+	/** @type {number|null} Interval ID para actualizar tiempo */
+	#timerInterval = null;
+
+	/** @type {number} Timestamp de inicio del tracking */
+	#trackingStartTime = 0;
+
+	/** @type {number} Tiempo acumulado antes de pausar (ms) */
+	#pausedTimeAccumulated = 0;
+
 	/**
 	 * Crea una instancia de UIController.
 	 *
@@ -175,6 +187,7 @@ export class UIController {
 	#cacheElements() {
 		this.#elements = {
 			startBtn: document.getElementById("btn-start"),
+			pauseBtn: document.getElementById("btn-pause"),
 			stopBtn: document.getElementById("btn-stop"),
 			saveBtn: document.getElementById("btn-save"),
 			exportBtn: document.getElementById("btn-export"),
@@ -183,6 +196,8 @@ export class UIController {
 			pointsDisplay: document.getElementById("points"),
 			statusDisplay: document.getElementById("status"),
 			routeNameInput: document.getElementById("route-name"),
+			elapsedTimeDisplay: document.getElementById("elapsed-time"),
+			speedDisplay: document.getElementById("speed"),
 		};
 	}
 
@@ -193,10 +208,11 @@ export class UIController {
 	 * @returns {void}
 	 */
 	#bindEvents() {
-		const { startBtn, stopBtn, saveBtn, exportBtn, locationBtn } =
+		const { startBtn, pauseBtn, stopBtn, saveBtn, exportBtn, locationBtn } =
 			this.#elements;
 
 		startBtn?.addEventListener("click", () => this.startTracking());
+		pauseBtn?.addEventListener("click", () => this.togglePause());
 		stopBtn?.addEventListener("click", () => this.stopTracking());
 		saveBtn?.addEventListener("click", () => this.saveRoute());
 		exportBtn?.addEventListener("click", () => this.exportRoute());
@@ -412,8 +428,14 @@ export class UIController {
 	 */
 	async #onTrackingStarted() {
 		this.#isTrackingActive = true;
+		this.#isPaused = false;
+		this.#trackingStartTime = Date.now();
+		this.#pausedTimeAccumulated = 0;
 		this.#setButtonsState(true);
 		this.#setStatus("Rastreando...");
+
+		// Iniciar timer para actualizar tiempo cada segundo
+		this.#startTimer();
 
 		// Activar Wake Lock para mantener pantalla activa
 		if (this.#wakeLockService) {
@@ -436,8 +458,12 @@ export class UIController {
 	 */
 	async #onTrackingStopped() {
 		this.#isTrackingActive = false;
+		this.#isPaused = false;
 		this.#setButtonsState(false);
 		this.#setStatus("Detenido");
+
+		// Detener timer
+		this.#stopTimer();
 
 		// Liberar Wake Lock
 		if (this.#wakeLockService) {
@@ -457,16 +483,128 @@ export class UIController {
 	}
 
 	/**
+	 * Verifica si el tracking está pausado.
+	 *
+	 * @returns {boolean} True si está pausado
+	 */
+	isPaused() {
+		return this.#isPaused;
+	}
+
+	/**
+	 * Alterna entre pausar y reanudar el tracking.
+	 */
+	togglePause() {
+		if (this.#isPaused) {
+			this.resumeTracking();
+		} else {
+			this.pauseTracking();
+		}
+	}
+
+	/**
+	 * Pausa el tracking actual.
+	 */
+	pauseTracking() {
+		if (!this.#isTrackingActive || this.#isPaused) return;
+
+		this.#isPaused = true;
+
+		// Guardar tiempo transcurrido hasta ahora
+		this.#pausedTimeAccumulated += Date.now() - this.#trackingStartTime;
+
+		// Detener GPS (pero no finalizar la ruta)
+		if (this.#simulationMode && this.#simulator) {
+			this.#simulator.stop();
+		} else {
+			this.#geoService.stopWatching();
+		}
+
+		// Detener timer
+		this.#stopTimer();
+
+		// Actualizar UI
+		this.#updatePauseButton(true);
+		this.#setStatus("⏸ Pausado");
+		Notifications.info("Tracking pausado");
+	}
+
+	/**
+	 * Reanuda el tracking pausado.
+	 */
+	resumeTracking() {
+		if (!this.#isTrackingActive || !this.#isPaused) return;
+
+		this.#isPaused = false;
+
+		// Reiniciar timestamp desde ahora
+		this.#trackingStartTime = Date.now();
+
+		// Reactivar GPS
+		if (this.#simulationMode && this.#simulator) {
+			this.#simulator.start((position) => {
+				EventBus.emit("location:updated", position);
+			});
+		} else {
+			this.#geoService.startWatching(
+				(pos) => {},
+				(err) => {},
+			);
+		}
+
+		// Reiniciar timer
+		this.#startTimer();
+
+		// Actualizar UI
+		this.#updatePauseButton(false);
+		this.#setStatus("Rastreando...");
+		Notifications.success("Tracking reanudado");
+	}
+
+	/**
+	 * Actualiza el botón de pausa según el estado.
+	 *
+	 * @private
+	 * @param {boolean} isPaused - Si está pausado
+	 */
+	#updatePauseButton(isPaused) {
+		const { pauseBtn } = this.#elements;
+		if (!pauseBtn) return;
+
+		if (isPaused) {
+			pauseBtn.innerHTML = '<span class="btn__icon">▶</span> Reanudar';
+			pauseBtn.classList.remove("btn--warning");
+			pauseBtn.classList.add("btn--success");
+		} else {
+			pauseBtn.innerHTML = '<span class="btn__icon">⏸</span> Pausar';
+			pauseBtn.classList.remove("btn--success");
+			pauseBtn.classList.add("btn--warning");
+		}
+	}
+
+	/**
 	 * Actualiza estadísticas en pantalla.
 	 *
 	 * @private
 	 * @returns {void}
 	 */
 	#updateStats() {
-		if (!this.#currentRoute) return;
+		if (!this.#currentRoute) {
+			// Reset displays si no hay ruta
+			if (this.#elements.distanceDisplay)
+				this.#elements.distanceDisplay.textContent = "0.00";
+			if (this.#elements.pointsDisplay)
+				this.#elements.pointsDisplay.textContent = "0";
+			if (this.#elements.elapsedTimeDisplay)
+				this.#elements.elapsedTimeDisplay.textContent = "00:00:00";
+			if (this.#elements.speedDisplay)
+				this.#elements.speedDisplay.textContent = "0.0";
+			return;
+		}
 
 		const distance = this.#currentRoute.getDistance();
 		const points = this.#currentRoute.getPointCount();
+		const speed = this.#currentRoute.getCurrentSpeed();
 
 		if (this.#elements.distanceDisplay) {
 			this.#elements.distanceDisplay.textContent = distance.toFixed(2);
@@ -475,6 +613,65 @@ export class UIController {
 		if (this.#elements.pointsDisplay) {
 			this.#elements.pointsDisplay.textContent = points.toString();
 		}
+
+		if (this.#elements.speedDisplay) {
+			this.#elements.speedDisplay.textContent = speed.toFixed(1);
+		}
+	}
+
+	/**
+	 * Inicia el timer para actualizar el tiempo transcurrido.
+	 *
+	 * @private
+	 */
+	#startTimer() {
+		if (this.#timerInterval) {
+			clearInterval(this.#timerInterval);
+		}
+
+		this.#timerInterval = setInterval(() => {
+			this.#updateElapsedTime();
+		}, 1000);
+	}
+
+	/**
+	 * Detiene el timer.
+	 *
+	 * @private
+	 */
+	#stopTimer() {
+		if (this.#timerInterval) {
+			clearInterval(this.#timerInterval);
+			this.#timerInterval = null;
+		}
+	}
+
+	/**
+	 * Actualiza el display de tiempo transcurrido.
+	 *
+	 * @private
+	 */
+	#updateElapsedTime() {
+		if (!this.#elements.elapsedTimeDisplay) return;
+
+		// Tiempo total = acumulado + tiempo desde último inicio (si no está pausado)
+		let elapsed = this.#pausedTimeAccumulated;
+		if (!this.#isPaused) {
+			elapsed += Date.now() - this.#trackingStartTime;
+		}
+
+		const totalSeconds = Math.floor(elapsed / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		const formatted = [
+			hours.toString().padStart(2, "0"),
+			minutes.toString().padStart(2, "0"),
+			seconds.toString().padStart(2, "0"),
+		].join(":");
+
+		this.#elements.elapsedTimeDisplay.textContent = formatted;
 	}
 
 	/**
@@ -485,16 +682,23 @@ export class UIController {
 	 * @returns {void}
 	 */
 	#setButtonsState(isTracking) {
-		const { startBtn, stopBtn, saveBtn, exportBtn } = this.#elements;
+		const { startBtn, pauseBtn, stopBtn, saveBtn, exportBtn } = this.#elements;
 
 		if (startBtn) startBtn.disabled = isTracking;
+		if (pauseBtn) pauseBtn.disabled = !isTracking;
 		if (stopBtn) stopBtn.disabled = !isTracking;
 		if (saveBtn) saveBtn.disabled = isTracking;
 		if (exportBtn) exportBtn.disabled = isTracking;
 
 		// Mostrar/ocultar botones
 		if (startBtn) startBtn.style.display = isTracking ? "none" : "inline-flex";
+		if (pauseBtn) pauseBtn.style.display = isTracking ? "inline-flex" : "none";
 		if (stopBtn) stopBtn.style.display = isTracking ? "inline-flex" : "none";
+
+		// Resetear botón de pausa al estado inicial
+		if (isTracking && pauseBtn) {
+			this.#updatePauseButton(false);
+		}
 	}
 
 	/**

@@ -242,6 +242,15 @@ body {
   background: var(--color-danger-dark);
 }
 
+.btn--warning {
+  background: var(--color-warning);
+  color: var(--color-white);
+}
+
+.btn--warning:hover:not(:disabled) {
+  background: var(--color-warning-dark);
+}
+
 .btn--secondary {
   background: var(--color-gray-200);
   color: var(--color-gray-700);
@@ -293,6 +302,12 @@ body {
   font-size: var(--font-size-xl);
   font-weight: 600;
   color: var(--color-gray-900);
+}
+
+.stats__value--time {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
 }
 
 .stats__value--status {

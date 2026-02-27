@@ -41,6 +41,10 @@
                         <span class="btn__icon">▶</span>
                         Iniciar
                     </button>
+                    <button id="btn-pause" class="btn btn--warning" style="display: none;">
+                        <span class="btn__icon">⏸</span>
+                        Pausar
+                    </button>
                     <button id="btn-stop" class="btn btn--danger" style="display: none;">
                         <span class="btn__icon">◼</span>
                         Detener
@@ -48,6 +52,7 @@
                     <button id="btn-save" class="btn btn--success" disabled>
                         <span class="btn__icon">💾</span>
                         Guardar
+                    </button>
                     </button>
                     <button id="btn-export" class="btn btn--secondary" disabled>
                         <span class="btn__icon">📤</span>
@@ -64,6 +69,14 @@
                     <div class="stats__item">
                         <span class="stats__label">Distancia</span>
                         <span class="stats__value"><span id="distance">0.00</span> km</span>
+                    </div>
+                    <div class="stats__item">
+                        <span class="stats__label">Tiempo</span>
+                        <span class="stats__value stats__value--time" id="elapsed-time">00:00:00</span>
+                    </div>
+                    <div class="stats__item">
+                        <span class="stats__label">Velocidad</span>
+                        <span class="stats__value"><span id="speed">0.0</span> km/h</span>
                     </div>
                     <div class="stats__item">
                         <span class="stats__label">Puntos</span>

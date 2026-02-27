@@ -105,6 +105,80 @@ export class Route {
 	}
 
 	/**
+	 * Calcula el tiempo transcurrido desde el primer punto.
+	 *
+	 * @returns {number} Tiempo en milisegundos (0 si no hay puntos)
+	 */
+	getElapsedTime() {
+		if (this.points.length < 1) return 0;
+
+		const firstPoint = this.points[0];
+		const lastPoint = this.points[this.points.length - 1];
+
+		return (lastPoint.timestamp || Date.now()) - (firstPoint.timestamp || 0);
+	}
+
+	/**
+	 * Calcula el tiempo transcurrido formateado.
+	 *
+	 * @returns {string} Tiempo en formato HH:MM:SS
+	 */
+	getFormattedElapsedTime() {
+		const ms = this.getElapsedTime();
+		const totalSeconds = Math.floor(ms / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		return [
+			hours.toString().padStart(2, "0"),
+			minutes.toString().padStart(2, "0"),
+			seconds.toString().padStart(2, "0"),
+		].join(":");
+	}
+
+	/**
+	 * Calcula la velocidad actual basada en los últimos 2 puntos.
+	 *
+	 * @returns {number} Velocidad en km/h (0 si no hay suficientes puntos)
+	 */
+	getCurrentSpeed() {
+		if (this.points.length < 2) return 0;
+
+		const lastPoint = this.points[this.points.length - 1];
+		const prevPoint = this.points[this.points.length - 2];
+
+		// Distancia entre los últimos 2 puntos (en km)
+		const distance = DistanceCalculator.haversine(
+			prevPoint.lat,
+			prevPoint.lng,
+			lastPoint.lat,
+			lastPoint.lng,
+		);
+
+		// Tiempo entre los últimos 2 puntos (en horas)
+		const timeDiff = (lastPoint.timestamp - prevPoint.timestamp) / 1000 / 3600;
+
+		if (timeDiff <= 0) return 0;
+
+		return distance / timeDiff;
+	}
+
+	/**
+	 * Calcula la velocidad promedio del recorrido.
+	 *
+	 * @returns {number} Velocidad promedio en km/h
+	 */
+	getAverageSpeed() {
+		const distance = this.getDistance();
+		const timeHours = this.getElapsedTime() / 1000 / 3600;
+
+		if (timeHours <= 0) return 0;
+
+		return distance / timeHours;
+	}
+
+	/**
 	 * Limpia todos los puntos del recorrido.
 	 *
 	 * @returns {void}
@@ -125,6 +199,8 @@ export class Route {
 			points: this.points,
 			createdAt: this.createdAt,
 			distance: this.getDistance(),
+			duration: this.getElapsedTime(),
+			averageSpeed: this.getAverageSpeed(),
 		};
 	}
 
