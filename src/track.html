@@ -53,11 +53,40 @@
                         <span class="btn__icon">💾</span>
                         Guardar
                     </button>
-                    </button>
-                    <button id="btn-export" class="btn btn--secondary" disabled>
-                        <span class="btn__icon">📤</span>
-                        Exportar
-                    </button>
+                    
+                    <!-- Export Dropdown -->
+                    <div class="dropdown" id="export-dropdown">
+                        <button id="btn-export" class="btn btn--secondary dropdown__trigger" disabled>
+                            <span class="btn__icon">📤</span>
+                            Exportar
+                            <span class="dropdown__arrow">▼</span>
+                        </button>
+                        <div class="dropdown__menu">
+                            <button class="dropdown__item" data-export="gpx">
+                                <span class="dropdown__icon">📄</span>
+                                Descargar GPX
+                            </button>
+                            <button class="dropdown__item" data-export="kml">
+                                <span class="dropdown__icon">🌍</span>
+                                Descargar KML
+                            </button>
+                            <hr class="dropdown__divider" />
+                            <button class="dropdown__item" data-export="google">
+                                <span class="dropdown__icon">🗺️</span>
+                                Abrir en Google Maps
+                            </button>
+                            <button class="dropdown__item" data-export="apple">
+                                <span class="dropdown__icon">🍎</span>
+                                Abrir en Apple Maps
+                            </button>
+                            <hr class="dropdown__divider" id="share-divider" style="display: none;" />
+                            <button class="dropdown__item" data-export="share" id="btn-share" style="display: none;">
+                                <span class="dropdown__icon">📲</span>
+                                Compartir...
+                            </button>
+                        </div>
+                    </div>
+                    
                     <button id="btn-location" class="btn btn--secondary">
                         <span class="btn__icon">📍</span>
                         Mi ubicación

@@ -4,7 +4,7 @@ Aplicación web para rastreo y registro de recorridos mediante GPS utilizando Le
 
 ## 📋 Descripción
 
-Tracking App es una aplicación web que permite a los usuarios grabar recorridos mediante geolocalización GPS, visualizarlos en un mapa interactivo, guardarlos en almacenamiento local y exportarlos como archivos JSON. La aplicación utiliza Leaflet con OpenStreetMap para la visualización de mapas, implementando una arquitectura SOLID con principios de diseño moderno.
+Tracking App es una aplicación web que permite a los usuarios grabar recorridos mediante geolocalización GPS, visualizarlos en un mapa interactivo, guardarlos en almacenamiento local y exportarlos en múltiples formatos (JSON, GPX, KML). La aplicación utiliza Leaflet con OpenStreetMap para la visualización de mapas, implementando una arquitectura SOLID con principios de diseño moderno.
 
 ## 🚀 Características
 
@@ -14,9 +14,17 @@ Tracking App es una aplicación web que permite a los usuarios grabar recorridos
 - ✅ Visualización de recorridos en mapa interactivo (OpenStreetMap)
 - ✅ Cálculo automático de distancia recorrida
 - ✅ Almacenamiento persistente en LocalStorage
-- ✅ Exportación de recorridos a formato JSON
 - ✅ Importación de recorridos desde archivos JSON
 - ✅ Panel de gestión de recorridos guardados
+
+### Exportación Múltiple
+
+- ✅ **JSON** - Formato nativo para importar/exportar
+- ✅ **GPX** - Compatible con Strava, Garmin, apps de fitness
+- ✅ **KML** - Compatible con Google Earth
+- ✅ **Google Maps** - Abrir ruta directamente en Google Maps
+- ✅ **Apple Maps** - Abrir ruta directamente en Apple Maps
+- ✅ **Web Share API** - Compartir archivos GPX en dispositivos móviles
 
 ### Estadísticas en Tiempo Real
 
@@ -63,6 +71,7 @@ tracking/
 │   ├── core/                    # Servicios core
 │   │   ├── DistanceCalculator.js    # Cálculo de distancias (Haversine)
 │   │   ├── EventBus.js              # Sistema de eventos pub/sub
+│   │   ├── ExportService.js         # Exportación GPX/KML/Deep Links
 │   │   ├── GeoLocationService.js    # Wrapper Geolocation API
 │   │   ├── GeoSimulator.js          # Simulador GPS para testing
 │   │   ├── MapService.js            # Wrapper Leaflet/OpenStreetMap
@@ -73,7 +82,7 @@ tracking/
 │   ├── ui/
 │   │   ├── UIController.js          # Controlador principal de UI
 │   │   └── Notifications.js         # Sistema de notificaciones toast
-│   ├── __tests__/                   # Tests unitarios (83 tests)
+│   ├── __tests__/                   # Tests unitarios (106 tests)
 │   ├── app.js                       # Bootstrap de la aplicación
 │   ├── index.html                   # Dashboard de recorridos
 │   ├── track.html                   # Página de tracking
@@ -129,20 +138,25 @@ bun test           # Ejecutar tests
 bun test --watch   # Watch mode
 ```
 
-**Estado actual**: 83 tests pasando ✅
+**Estado actual**: 106 tests pasando ✅
 
 ## 🎮 Controles
 
 ### Durante Tracking
 
-| Botón        | Acción                           |
-| ------------ | -------------------------------- |
-| **Iniciar**  | Comienza grabación GPS           |
-| **Pausar**   | Pausa grabación (GPS se detiene) |
-| **Reanudar** | Continúa grabación               |
-| **Terminar** | Detiene grabación                |
-| **Guardar**  | Persiste en LocalStorage         |
-| **Exportar** | Descarga JSON                    |
+| Botón          | Acción                           |
+| -------------- | -------------------------------- |
+| **Iniciar**    | Comienza grabación GPS           |
+| **Pausar**     | Pausa grabación (GPS se detiene) |
+| **Reanudar**   | Continúa grabación               |
+| **Terminar**   | Detiene grabación                |
+| **Guardar**    | Persiste en LocalStorage         |
+| **Exportar ▼** | Menú desplegable de exportación  |
+| → GPX          | Descarga archivo GPX             |
+| → KML          | Descarga archivo KML             |
+| → Google Maps  | Abre ruta en Google Maps         |
+| → Apple Maps   | Abre ruta en Apple Maps          |
+| → Compartir    | Comparte vía Web Share (móvil)   |
 
 ## 📱 Compatibilidad
 
@@ -155,9 +169,9 @@ bun test --watch   # Watch mode
 ## 🔮 Roadmap
 
 - [ ] PWA + Soporte offline
-- [ ] Exportación a GPX
 - [ ] Configuración de unidades (km/millas)
 - [ ] Eliminar recorridos individuales
+- [ ] Importar archivos GPX
 
 ## 📄 Licencia
 

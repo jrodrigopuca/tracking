@@ -19,6 +19,7 @@ import { EventBus } from "../core/EventBus.js";
 import { Notifications } from "./Notifications.js";
 import { Route } from "../models/Route.js";
 import { GeoSimulator } from "../core/GeoSimulator.js";
+import { ExportService } from "../core/ExportService.js";
 
 /**
  * @typedef {Object} UIElements
@@ -191,6 +192,9 @@ export class UIController {
 			stopBtn: document.getElementById("btn-stop"),
 			saveBtn: document.getElementById("btn-save"),
 			exportBtn: document.getElementById("btn-export"),
+			exportDropdown: document.getElementById("export-dropdown"),
+			shareBtn: document.getElementById("btn-share"),
+			shareDivider: document.getElementById("share-divider"),
 			locationBtn: document.getElementById("btn-location"),
 			distanceDisplay: document.getElementById("distance"),
 			pointsDisplay: document.getElementById("points"),
@@ -208,20 +212,48 @@ export class UIController {
 	 * @returns {void}
 	 */
 	#bindEvents() {
-		const { startBtn, pauseBtn, stopBtn, saveBtn, exportBtn, locationBtn } =
-			this.#elements;
+		const {
+			startBtn,
+			pauseBtn,
+			stopBtn,
+			saveBtn,
+			exportBtn,
+			exportDropdown,
+			locationBtn,
+		} = this.#elements;
 
 		startBtn?.addEventListener("click", () => this.startTracking());
 		pauseBtn?.addEventListener("click", () => this.togglePause());
 		stopBtn?.addEventListener("click", () => this.stopTracking());
 		saveBtn?.addEventListener("click", () => this.saveRoute());
-		exportBtn?.addEventListener("click", () => this.exportRoute());
 		locationBtn?.addEventListener("click", () => this.goToMyLocation());
+
+		// Export dropdown handling
+		exportBtn?.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.#toggleExportDropdown();
+		});
+
+		// Export dropdown item clicks
+		exportDropdown?.querySelectorAll(".dropdown__item").forEach((item) => {
+			item.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const action = item.dataset.export;
+				this.#handleExportAction(action);
+				this.#closeExportDropdown();
+			});
+		});
+
+		// Close dropdown when clicking outside
+		document.addEventListener("click", () => this.#closeExportDropdown());
 
 		// Resize handler
 		window.addEventListener("resize", () => {
 			this.#mapService?.invalidateSize();
 		});
+
+		// Detect Web Share support
+		this.#initWebShareSupport();
 	}
 
 	/**
@@ -335,7 +367,7 @@ export class UIController {
 	}
 
 	/**
-	 * Exporta el recorrido actual a JSON.
+	 * Exporta el recorrido actual a JSON (legacy).
 	 *
 	 * @returns {void}
 	 */
@@ -347,6 +379,95 @@ export class UIController {
 
 		this.#storageService.exportToJson(this.#currentRoute.toJSON());
 		Notifications.info("Recorrido exportado");
+	}
+
+	/**
+	 * Toggle del dropdown de exportación.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#toggleExportDropdown() {
+		const { exportDropdown } = this.#elements;
+		if (!exportDropdown) return;
+
+		exportDropdown.classList.toggle("is-open");
+	}
+
+	/**
+	 * Cierra el dropdown de exportación.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#closeExportDropdown() {
+		const { exportDropdown } = this.#elements;
+		if (!exportDropdown) return;
+
+		exportDropdown.classList.remove("is-open");
+	}
+
+	/**
+	 * Inicializa soporte de Web Share API.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#initWebShareSupport() {
+		const { shareBtn, shareDivider } = this.#elements;
+
+		if (ExportService.canShare() && shareBtn && shareDivider) {
+			shareBtn.style.display = "flex";
+			shareDivider.style.display = "block";
+		}
+	}
+
+	/**
+	 * Maneja acciones de exportación.
+	 *
+	 * @private
+	 * @param {string} action - Tipo de exportación
+	 * @returns {Promise<void>}
+	 */
+	async #handleExportAction(action) {
+		if (!this.#currentRoute || this.#currentRoute.getPointCount() === 0) {
+			Notifications.warning("No hay recorrido para exportar");
+			return;
+		}
+
+		const routeData = this.#currentRoute.toJSON();
+
+		switch (action) {
+			case "gpx":
+				ExportService.downloadGPX(routeData);
+				Notifications.success("Archivo GPX descargado");
+				break;
+
+			case "kml":
+				ExportService.downloadKML(routeData);
+				Notifications.success("Archivo KML descargado");
+				break;
+
+			case "google":
+				ExportService.openInGoogleMaps(routeData);
+				Notifications.info("Abriendo Google Maps...");
+				break;
+
+			case "apple":
+				ExportService.openInAppleMaps(routeData);
+				Notifications.info("Abriendo Apple Maps...");
+				break;
+
+			case "share":
+				const shared = await ExportService.share(routeData, "gpx");
+				if (shared) {
+					Notifications.success("Recorrido compartido");
+				}
+				break;
+
+			default:
+				console.warn("Unknown export action:", action);
+		}
 	}
 
 	/**
