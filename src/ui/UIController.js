@@ -54,6 +54,9 @@ export class UIController {
 	/** @type {import('../core/StorageService.js').StorageService} */
 	#storageService;
 
+	/** @type {import('../core/WakeLockService.js').WakeLockService|null} */
+	#wakeLockService = null;
+
 	/** @type {Route|null} */
 	#currentRoute = null;
 
@@ -72,15 +75,24 @@ export class UIController {
 	/** @type {L.Marker|null} Marker de la posición actual */
 	#currentMarker = null;
 
+	/** @type {boolean} Si está haciendo tracking activo */
+	#isTrackingActive = false;
+
 	/**
 	 * Crea una instancia de UIController.
 	 *
 	 * @param {UIControllerDependencies} dependencies - Servicios inyectados
 	 */
-	constructor({ mapService, geoService, storageService }) {
+	constructor({
+		mapService,
+		geoService,
+		storageService,
+		wakeLockService = null,
+	}) {
 		this.#mapService = mapService;
 		this.#geoService = geoService;
 		this.#storageService = storageService;
+		this.#wakeLockService = wakeLockService;
 	}
 
 	/**
@@ -166,6 +178,7 @@ export class UIController {
 			stopBtn: document.getElementById("btn-stop"),
 			saveBtn: document.getElementById("btn-save"),
 			exportBtn: document.getElementById("btn-export"),
+			locationBtn: document.getElementById("btn-location"),
 			distanceDisplay: document.getElementById("distance"),
 			pointsDisplay: document.getElementById("points"),
 			statusDisplay: document.getElementById("status"),
@@ -180,12 +193,14 @@ export class UIController {
 	 * @returns {void}
 	 */
 	#bindEvents() {
-		const { startBtn, stopBtn, saveBtn, exportBtn } = this.#elements;
+		const { startBtn, stopBtn, saveBtn, exportBtn, locationBtn } =
+			this.#elements;
 
 		startBtn?.addEventListener("click", () => this.startTracking());
 		stopBtn?.addEventListener("click", () => this.stopTracking());
 		saveBtn?.addEventListener("click", () => this.saveRoute());
 		exportBtn?.addEventListener("click", () => this.exportRoute());
+		locationBtn?.addEventListener("click", () => this.goToMyLocation());
 
 		// Resize handler
 		window.addEventListener("resize", () => {
@@ -319,6 +334,24 @@ export class UIController {
 	}
 
 	/**
+	 * Centra el mapa en la ubicación actual del usuario.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async goToMyLocation() {
+		try {
+			Notifications.info("Obteniendo ubicación...");
+			const pos = await this.#geoService.getCurrentPosition();
+			this.#mapService.centerOn(pos, 17);
+			this.#mapService.addUserMarker(pos, "Estás aquí");
+			Notifications.success("Ubicación encontrada");
+		} catch (error) {
+			Notifications.error("No se pudo obtener tu ubicación");
+			console.error("Error getting location:", error);
+		}
+	}
+
+	/**
 	 * Maneja actualización de ubicación.
 	 *
 	 * @private
@@ -333,19 +366,16 @@ export class UIController {
 		// Agregar punto
 		this.#currentRoute.addPoint(pos.lat, pos.lng);
 
-		// Marker de inicio (solo primer punto)
+		// Marker de inicio (solo primer punto) - Verde
 		if (isFirstPoint) {
-			this.#startMarker = this.#mapService.addMarkerWithPopup(pos, "🚀 Inicio");
+			this.#startMarker = this.#mapService.addStartMarker(pos, "Inicio");
 		}
 
-		// Marker de posición actual (mover o crear)
+		// Marker de posición actual (mover o crear) - Azul con pulso
 		if (this.#currentMarker) {
 			this.#currentMarker.setLatLng([pos.lat, pos.lng]);
 		} else {
-			this.#currentMarker = this.#mapService.addMarkerWithPopup(
-				pos,
-				"📍 Actual",
-			);
+			this.#currentMarker = this.#mapService.addCurrentMarker(pos);
 		}
 
 		// Actualizar polyline y centrar mapa
@@ -380,10 +410,22 @@ export class UIController {
 	 * @private
 	 * @returns {void}
 	 */
-	#onTrackingStarted() {
+	async #onTrackingStarted() {
+		this.#isTrackingActive = true;
 		this.#setButtonsState(true);
 		this.#setStatus("Rastreando...");
-		Notifications.success("Tracking iniciado");
+
+		// Activar Wake Lock para mantener pantalla activa
+		if (this.#wakeLockService) {
+			const acquired = await this.#wakeLockService.request();
+			if (acquired) {
+				Notifications.success("Tracking iniciado - Pantalla activa 🔒");
+			} else {
+				Notifications.success("Tracking iniciado");
+			}
+		} else {
+			Notifications.success("Tracking iniciado");
+		}
 	}
 
 	/**
@@ -392,10 +434,26 @@ export class UIController {
 	 * @private
 	 * @returns {void}
 	 */
-	#onTrackingStopped() {
+	async #onTrackingStopped() {
+		this.#isTrackingActive = false;
 		this.#setButtonsState(false);
 		this.#setStatus("Detenido");
+
+		// Liberar Wake Lock
+		if (this.#wakeLockService) {
+			await this.#wakeLockService.release();
+		}
+
 		Notifications.info("Tracking detenido");
+	}
+
+	/**
+	 * Verifica si el tracking está activo.
+	 *
+	 * @returns {boolean} True si está haciendo tracking
+	 */
+	isTracking() {
+		return this.#isTrackingActive;
 	}
 
 	/**
@@ -514,14 +572,14 @@ export class UIController {
 			// Dibujar polyline
 			this.#mapService.updatePolyline(this.#currentRoute.points);
 
-			// Agregar markers en inicio y fin
+			// Agregar markers en inicio (verde) y fin (rojo)
 			const firstPoint = this.#currentRoute.points[0];
 			const lastPoint =
 				this.#currentRoute.points[this.#currentRoute.points.length - 1];
 
-			this.#mapService.addMarkerWithPopup(firstPoint, "🚀 Inicio");
+			this.#mapService.addStartMarker(firstPoint, "Inicio");
 			if (this.#currentRoute.points.length > 1) {
-				this.#mapService.addMarkerWithPopup(lastPoint, "🏁 Fin");
+				this.#mapService.addEndMarker(lastPoint, "Fin");
 			}
 
 			// Centrar mapa en el primer punto del recorrido

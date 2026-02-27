@@ -46,6 +46,9 @@ export class MapService {
 	/** @type {string} ID del contenedor */
 	#containerId;
 
+	/** @type {Object} Iconos personalizados por tipo */
+	#icons = {};
+
 	/**
 	 * Crea una nueva instancia de MapService.
 	 *
@@ -57,6 +60,7 @@ export class MapService {
 		const { lat = -12.0464, lng = -77.0428, zoom = 18 } = options;
 
 		this.#map = L.map(containerId).setView([lat, lng], zoom);
+		this.#createCustomIcons();
 
 		L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 			maxZoom: 19,
@@ -64,6 +68,120 @@ export class MapService {
 		}).addTo(this.#map);
 
 		EventBus.emit("map:ready", { map: this.#map });
+	}
+
+	/**
+	 * Crea los iconos personalizados para los diferentes tipos de markers.
+	 *
+	 * @private
+	 */
+	#createCustomIcons() {
+		// Icono de inicio (verde)
+		this.#icons.start = L.divIcon({
+			className: "custom-marker custom-marker--start",
+			html: '<div class="marker-pin"></div><span class="marker-label">🚀</span>',
+			iconSize: [30, 42],
+			iconAnchor: [15, 42],
+			popupAnchor: [0, -42],
+		});
+
+		// Icono de fin (rojo)
+		this.#icons.end = L.divIcon({
+			className: "custom-marker custom-marker--end",
+			html: '<div class="marker-pin"></div><span class="marker-label">🏁</span>',
+			iconSize: [30, 42],
+			iconAnchor: [15, 42],
+			popupAnchor: [0, -42],
+		});
+
+		// Icono de posición actual (azul con pulso)
+		this.#icons.current = L.divIcon({
+			className: "custom-marker custom-marker--current",
+			html: '<div class="marker-pin"></div><div class="marker-pulse"></div>',
+			iconSize: [20, 20],
+			iconAnchor: [10, 10],
+			popupAnchor: [0, -10],
+		});
+
+		// Icono de ubicación del usuario (morado)
+		this.#icons.user = L.divIcon({
+			className: "custom-marker custom-marker--user",
+			html: '<div class="marker-pin"></div><span class="marker-label">📍</span>',
+			iconSize: [30, 42],
+			iconAnchor: [15, 42],
+			popupAnchor: [0, -42],
+		});
+	}
+
+	/**
+	 * Agrega un marker de inicio (verde).
+	 *
+	 * @param {Position} position - Posición del marker
+	 * @param {string} [popupContent="Inicio"] - Contenido del popup
+	 * @returns {L.Marker} El marker creado
+	 */
+	addStartMarker(position, popupContent = "Inicio") {
+		const marker = L.marker([position.lat, position.lng], {
+			icon: this.#icons.start,
+		}).addTo(this.#map);
+		marker.bindPopup(
+			`<strong style="color: #22c55e;">🚀 ${popupContent}</strong>`,
+		);
+		this.#markers.push(marker);
+		return marker;
+	}
+
+	/**
+	 * Agrega un marker de fin (rojo).
+	 *
+	 * @param {Position} position - Posición del marker
+	 * @param {string} [popupContent="Fin"] - Contenido del popup
+	 * @returns {L.Marker} El marker creado
+	 */
+	addEndMarker(position, popupContent = "Fin") {
+		const marker = L.marker([position.lat, position.lng], {
+			icon: this.#icons.end,
+		}).addTo(this.#map);
+		marker.bindPopup(
+			`<strong style="color: #ef4444;">🏁 ${popupContent}</strong>`,
+		);
+		this.#markers.push(marker);
+		return marker;
+	}
+
+	/**
+	 * Agrega un marker de posición actual (azul con pulso).
+	 *
+	 * @param {Position} position - Posición del marker
+	 * @returns {L.Marker} El marker creado
+	 */
+	addCurrentMarker(position) {
+		const marker = L.marker([position.lat, position.lng], {
+			icon: this.#icons.current,
+		}).addTo(this.#map);
+		marker.bindPopup(
+			'<strong style="color: #3b82f6;">Posición actual</strong>',
+		);
+		this.#markers.push(marker);
+		return marker;
+	}
+
+	/**
+	 * Agrega un marker de ubicación del usuario (morado).
+	 *
+	 * @param {Position} position - Posición del marker
+	 * @param {string} [popupContent="Estás aquí"] - Contenido del popup
+	 * @returns {L.Marker} El marker creado
+	 */
+	addUserMarker(position, popupContent = "Estás aquí") {
+		const marker = L.marker([position.lat, position.lng], {
+			icon: this.#icons.user,
+		}).addTo(this.#map);
+		marker.bindPopup(
+			`<strong style="color: #8b5cf6;">📍 ${popupContent}</strong>`,
+		);
+		this.#markers.push(marker);
+		return marker;
 	}
 
 	/**

@@ -12,6 +12,7 @@
 import { MapService } from "./core/MapService.js";
 import { GeoLocationService } from "./core/GeoLocationService.js";
 import { StorageService } from "./core/StorageService.js";
+import { WakeLockService } from "./core/WakeLockService.js";
 import { EventBus } from "./core/EventBus.js";
 import { UIController } from "./ui/UIController.js";
 import { Notifications } from "./ui/Notifications.js";
@@ -54,6 +55,9 @@ class App {
 	/** @type {StorageService} */
 	storageService;
 
+	/** @type {WakeLockService} */
+	wakeLockService;
+
 	/** @type {UIController} */
 	uiController;
 
@@ -80,6 +84,7 @@ class App {
 			// Inicializar servicios core
 			this.storageService = new StorageService(this.#config.storageKey);
 			this.geoService = new GeoLocationService();
+			this.wakeLockService = new WakeLockService();
 			this.mapService = new MapService(
 				this.#config.mapContainerId,
 				this.#config.mapOptions,
@@ -90,15 +95,21 @@ class App {
 				mapService: this.mapService,
 				geoService: this.geoService,
 				storageService: this.storageService,
+				wakeLockService: this.wakeLockService,
 			});
 
 			this.uiController.init();
 
-			// Centrar mapa en ubicación del usuario
-			this.#centerOnUserLocation();
+			// Suscribirse a eventos de background/foreground
+			this.#setupBackgroundListeners();
 
 			// Verificar si hay ruta para cargar desde URL
-			this.#loadRouteFromURL();
+			const routeLoaded = this.#loadRouteFromURL();
+
+			// Centrar mapa en ubicación del usuario solo si no hay ruta cargada
+			if (!routeLoaded) {
+				this.#centerOnUserLocation();
+			}
 
 			// Log para debugging
 			console.log("🚀 Tracking App initialized");
@@ -128,14 +139,48 @@ class App {
 	/**
 	 * Carga una ruta desde el parámetro ID en la URL.
 	 * @private
+	 * @returns {boolean} True si se cargó una ruta
 	 */
 	#loadRouteFromURL() {
 		const urlParams = new URLSearchParams(window.location.search);
 		const routeId = urlParams.get("id");
 
 		if (routeId) {
-			this.uiController.loadRoute(routeId);
+			return this.uiController.loadRoute(routeId);
 		}
+		return false;
+	}
+
+	/**
+	 * Configura listeners para eventos de background/foreground.
+	 * @private
+	 */
+	#setupBackgroundListeners() {
+		// Notificar cuando la app va a background durante tracking
+		EventBus.on("app:background", () => {
+			if (this.uiController.isTracking()) {
+				Notifications.warning(
+					"⚠️ App en segundo plano - El tracking puede pausarse",
+					{ duration: 5000 },
+				);
+			}
+		});
+
+		// Notificar cuando la app vuelve a primer plano
+		EventBus.on("app:foreground", () => {
+			if (this.uiController.isTracking()) {
+				Notifications.info("📱 App activa - Tracking continúa");
+			}
+		});
+
+		// Notificar si Wake Lock no está soportado
+		EventBus.on("wakelock:unsupported", () => {
+			Notifications.warning(
+				"Tu navegador no soporta mantener la pantalla activa. " +
+					"Evita bloquear la pantalla durante el tracking.",
+				{ duration: 8000 },
+			);
+		});
 	}
 
 	/**

@@ -503,3 +503,105 @@ body {
     max-width: none;
   }
 }
+
+/* ========================================
+   Custom Map Markers
+   ======================================== */
+
+/* Base marker styles */
+.custom-marker {
+  position: relative;
+}
+
+.custom-marker .marker-pin {
+  width: 30px;
+  height: 30px;
+  border-radius: 50% 50% 50% 0;
+  position: absolute;
+  transform: rotate(-45deg);
+  left: 50%;
+  top: 50%;
+  margin: -15px 0 0 -15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.custom-marker .marker-label {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  left: 50%;
+  top: 50%;
+  margin: -15px 0 0 -15px;
+  z-index: 1;
+}
+
+/* Start marker - Green */
+.custom-marker--start .marker-pin {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: 3px solid #fff;
+}
+
+/* End marker - Red */
+.custom-marker--end .marker-pin {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: 3px solid #fff;
+}
+
+/* Current position marker - Blue with pulse */
+.custom-marker--current .marker-pin {
+  width: 16px;
+  height: 16px;
+  background: #3b82f6;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  transform: none;
+  margin: -8px 0 0 -8px;
+  box-shadow: 0 0 0 rgba(59, 130, 246, 0.5);
+  animation: pulse 2s infinite;
+}
+
+.custom-marker--current .marker-pulse {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.2);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -20px 0 0 -20px;
+  animation: pulse-ring 2s infinite;
+}
+
+/* User location marker - Purple */
+.custom-marker--user .marker-pin {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  border: 3px solid #fff;
+}
+
+/* Animations */
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
