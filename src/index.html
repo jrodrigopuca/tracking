@@ -1,81 +1,156 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Panel de Recorridos</title>
-        <link rel="stylesheet" href="./styles.css">
+        <title>Tracking GPS - Dashboard</title>
+        <link rel="stylesheet" href="./styles.css" />
     </head>
     <body>
-        <h1>Panel de Recorridos</h1>
+        <header class="header">
+            <h1 class="header__title">🗺️ Tracking GPS</h1>
+        </header>
 
-        <button id="add-route-btn" class="button">Agregar Recorrido</button>
-        <div id="routes-list"></div>
+        <main class="main main--dashboard">
+            <section class="dashboard">
+                <div class="dashboard__actions">
+                    <a href="./track.html" class="btn btn--primary btn--large">
+                        <span class="btn__icon">➕</span>
+                        Nuevo Recorrido
+                    </a>
+                    
+                    <label class="btn btn--secondary btn--large">
+                        <span class="btn__icon">📥</span>
+                        Importar JSON
+                        <input type="file" id="file-input" accept=".json" hidden />
+                    </label>
+                </div>
 
-        <!-- Campo de entrada para subir archivo JSON -->
-        <input type="file" id="fileInput" accept=".json">
-        <script>
-            // Función para redirigir a la página de seguimiento
-            const startTracking = () => {
-                window.location.href = "track.html";
-            };
+                <h2 class="dashboard__subtitle">Mis Recorridos</h2>
+                
+                <div id="routes-list" class="routes-list">
+                    <!-- Routes loaded dynamically -->
+                </div>
+            </section>
+        </main>
 
-            const redirectToTrack = (id) => {
-                alert("redirigiendo...");
-                window.location.href = `track.html?id=${id}`;
-            };
+        <script type="module">
+            import { StorageService } from './core/StorageService.js';
+            import { Route } from './models/Route.js';
+            import { Notifications } from './ui/Notifications.js';
+            import { EventBus } from './core/EventBus.js';
 
-            const loadRoutes = () => {
-                const routes = JSON.parse(localStorage.getItem("routes")) || [];
-                const routesList = document.getElementById("routes-list");
+            const storage = new StorageService('tracking_routes');
+
+            /**
+             * Renderiza la lista de recorridos
+             */
+            function renderRoutes() {
+                const routes = storage.getAll();
+                const container = document.getElementById('routes-list');
 
                 if (routes.length === 0) {
-                    routesList.innerHTML =
-                        "<p>No hay recorridos guardados.</p>";
-                } else {
-                    let html = "<ul>";
-                    routes.forEach((route, index) => {
-                        html += `<li class='list-item'>
-                          Recorrido ${index + 1}: ${route.id}
-                          <button class='button' onclick="              
-                            alert('redirigiendo...');
-                            window.location.href = 'track.html?id=${route.id}';
-                          ">Ver</button>
-                        </li>`;
-                    });
-                    html += "</ul>";
-                    routesList.innerHTML = html;
+                    container.innerHTML = `
+                        <div class="routes-list__empty">
+                            <p>No hay recorridos guardados</p>
+                            <p class="routes-list__hint">Crea uno nuevo o importa un archivo JSON</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = routes.map((route, index) => `
+                    <article class="route-card" data-id="${route.id}">
+                        <div class="route-card__info">
+                            <h3 class="route-card__name">${route.name || `Recorrido ${index + 1}`}</h3>
+                            <div class="route-card__meta">
+                                <span class="route-card__distance">📏 ${(route.distance || 0).toFixed(2)} km</span>
+                                <span class="route-card__points">📍 ${route.points?.length || 0} puntos</span>
+                                <span class="route-card__date">📅 ${formatDate(route.createdAt)}</span>
+                            </div>
+                        </div>
+                        <div class="route-card__actions">
+                            <a href="./track.html?id=${route.id}" class="btn btn--small btn--primary">Ver</a>
+                            <button class="btn btn--small btn--secondary" onclick="exportRoute('${route.id}')">Exportar</button>
+                            <button class="btn btn--small btn--danger" onclick="deleteRoute('${route.id}')">Eliminar</button>
+                        </div>
+                    </article>
+                `).join('');
+            }
+
+            /**
+             * Formatea una fecha ISO a formato legible
+             * @param {string} isoDate 
+             * @returns {string}
+             */
+            function formatDate(isoDate) {
+                if (!isoDate) return 'Sin fecha';
+                const date = new Date(isoDate);
+                return date.toLocaleDateString('es-PE', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric'
+                });
+            }
+
+            /**
+             * Exporta un recorrido a JSON
+             * @param {string} id 
+             */
+            window.exportRoute = function(id) {
+                const route = storage.getById(id);
+                if (route) {
+                    storage.exportToJson(route);
+                    Notifications.success('Recorrido exportado');
                 }
             };
 
-            loadRoutes();
-
-            const addNewRouteByFile = (event)=>{
-                const file = event.target.files[0];
-                const reader = new FileReader();
-                const routes = JSON.parse(localStorage.getItem("routes")) || [];
-                reader.onload = (e)=>{
-                    const jsonData = JSON.parse(e.target.result);
-                    const id= Date.now()
-                    const route = {
-                        name: "Imported-"+ id,
-                        id: id,
-                        distance: 0,
-                        path: jsonData
-                    }
-                    routes.push(route);
-                    localStorage.setItem("routes", JSON.stringify(routes));
-                    loadRoutes();
+            /**
+             * Elimina un recorrido
+             * @param {string} id 
+             */
+            window.deleteRoute = function(id) {
+                if (confirm('¿Eliminar este recorrido?')) {
+                    storage.delete(id);
+                    renderRoutes();
+                    Notifications.info('Recorrido eliminado');
                 }
-                reader.readAsText(file);
+            };
+
+            /**
+             * Maneja importación de archivo JSON
+             * @param {Event} event 
+             */
+            async function handleImport(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                try {
+                    const points = await storage.importFromJson(file);
+                    
+                    const route = new Route(`Importado - ${file.name.replace('.json', '')}`);
+                    points.forEach(p => route.addPoint(p.lat, p.lng));
+                    
+                    storage.save(route.toJSON());
+                    renderRoutes();
+                    Notifications.success(`Importado: ${points.length} puntos`);
+                } catch (error) {
+                    Notifications.error(error.message);
+                }
+                
+                // Reset input
+                event.target.value = '';
             }
 
-            document
-                .getElementById("add-route-btn")
-                .addEventListener("click", startTracking);
-            document
-                .getElementById("fileInput")
-                .addEventListener("change", addNewRouteByFile)
+            // Event listeners
+            document.getElementById('file-input').addEventListener('change', handleImport);
+
+            // Subscribe to storage events
+            EventBus.on('route:saved', renderRoutes);
+            EventBus.on('route:deleted', renderRoutes);
+
+            // Initial render
+            renderRoutes();
         </script>
     </body>
 </html>

@@ -1,6 +1,7 @@
 {
   "name": "tracking",
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "GPS Tracking App - Leaflet + OpenStreetMap",
   "repository": "https://jrodrigopuca@github.com/jrodrigopuca/tracking.git",
   "source": [
     "src/index.html",
@@ -8,13 +9,21 @@
   ],
   "scripts": {
     "start": "parcel --no-cache",
-    "build": "rm -rf dist && rm -rf .parcel-cache && parcel build --public-url ./"
+    "build": "rm -rf dist && rm -rf .parcel-cache && parcel build --public-url ./",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "author": "jarp",
   "license": "MIT",
   "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "happy-dom": "^12.0.0",
     "parcel": "^2.12.0",
     "path-browserify": "^1.0.1",
-    "process": "^0.11.10"
+    "process": "^0.11.10",
+    "vitest": "^1.0.0"
   }
 }
