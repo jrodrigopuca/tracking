@@ -38,6 +38,14 @@
             </button>
         </header>
 
+        <!-- My Location Button -->
+        <button id="btn-my-location" class="detail-location-btn" aria-label="Mi ubicación" title="Ver mi ubicación">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+            </svg>
+        </button>
+
         <!-- Stats Cards -->
         <div class="detail-stats" id="detail-stats">
             <div class="detail-stat">
@@ -75,6 +83,14 @@
 
         <!-- Replay Controls -->
         <div class="replay-controls" id="replay-controls">
+            <button id="btn-reverse" class="replay-btn replay-btn--small" aria-label="Invertir ruta" title="Invertir dirección">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="17 1 21 5 17 9"/>
+                    <path d="M3 11V9a4 4 0 014-4h14"/>
+                    <polyline points="7 23 3 19 7 15"/>
+                    <path d="M21 13v2a4 4 0 01-4 4H3"/>
+                </svg>
+            </button>
             <button id="btn-replay" class="replay-btn" aria-label="Reproducir recorrido">
                 <svg class="replay-btn__icon replay-btn__icon--play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 5v14l11-7z"/>
@@ -174,10 +190,12 @@
 
             // Route polyline
             let polyline = null;
-            let markers = { start: null, end: null, current: null };
+            let markers = { start: null, end: null, current: null, userLocation: null };
             let replayInterval = null;
             let isPlaying = false;
             let replayIndex = 0;
+            let isReversed = false;
+            let userLocationWatchId = null;
 
             /**
              * Format duration from start/end timestamps
@@ -313,15 +331,19 @@
                 playIcon.style.display = 'none';
                 pauseIcon.style.display = '';
 
-                if (replayIndex >= route.points.length - 1) {
+                // Get points in correct order based on isReversed
+                let latlngs = route.points.map(p => [p.lat, p.lng]);
+                if (isReversed) {
+                    latlngs = [...latlngs].reverse();
+                }
+
+                if (replayIndex >= latlngs.length - 1) {
                     replayIndex = 0;
                     if (markers.current) {
                         map.removeLayer(markers.current);
                         markers.current = null;
                     }
                 }
-
-                const latlngs = route.points.map(p => [p.lat, p.lng]);
 
                 replayInterval = setInterval(() => {
                     if (replayIndex >= latlngs.length) {
@@ -338,7 +360,7 @@
                     if (!markers.current) {
                         markers.current = L.circleMarker(pos, {
                             radius: 8,
-                            fillColor: '#3b82f6',
+                            fillColor: isReversed ? '#f59e0b' : '#3b82f6',
                             color: '#fff',
                             weight: 2,
                             fillOpacity: 1
@@ -420,11 +442,121 @@
                 }
             }
 
+            /**
+             * Toggle route direction (reverse)
+             */
+            function toggleReverse() {
+                const btn = document.getElementById('btn-reverse');
+                isReversed = !isReversed;
+                
+                // Toggle visual state
+                btn.classList.toggle('replay-btn--reversed', isReversed);
+                
+                // Reset replay if playing
+                if (isPlaying) {
+                    clearInterval(replayInterval);
+                    isPlaying = false;
+                    document.querySelector('.replay-btn__icon--play').style.display = '';
+                    document.querySelector('.replay-btn__icon--pause').style.display = 'none';
+                }
+                
+                // Reset replay position
+                replayIndex = 0;
+                if (markers.current) {
+                    map.removeLayer(markers.current);
+                    markers.current = null;
+                }
+                document.getElementById('replay-progress-bar').style.width = '0%';
+                document.getElementById('replay-time').textContent = '0%';
+                
+                Notifications.info(isReversed ? 'Reproducción inversa activada' : 'Reproducción normal');
+            }
+
+            /**
+             * Toggle user location tracking
+             */
+            function toggleMyLocation() {
+                const btn = document.getElementById('btn-my-location');
+                
+                if (userLocationWatchId !== null) {
+                    // Stop watching
+                    navigator.geolocation.clearWatch(userLocationWatchId);
+                    userLocationWatchId = null;
+                    btn.classList.remove('detail-location-btn--active', 'detail-location-btn--loading');
+                    
+                    if (markers.userLocation) {
+                        map.removeLayer(markers.userLocation);
+                        markers.userLocation = null;
+                    }
+                    return;
+                }
+
+                if (!navigator.geolocation) {
+                    Notifications.error('Geolocalización no soportada');
+                    return;
+                }
+
+                btn.classList.add('detail-location-btn--loading');
+
+                userLocationWatchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        const { latitude, longitude, accuracy } = position.coords;
+                        const pos = [latitude, longitude];
+                        
+                        btn.classList.remove('detail-location-btn--loading');
+                        btn.classList.add('detail-location-btn--active');
+
+                        if (!markers.userLocation) {
+                            // Create user location marker with pulsing effect
+                            markers.userLocation = L.circleMarker(pos, {
+                                radius: 10,
+                                fillColor: '#3b82f6',
+                                color: '#fff',
+                                weight: 3,
+                                fillOpacity: 0.9,
+                                className: 'user-location-marker'
+                            }).addTo(map);
+
+                            // Add accuracy circle
+                            markers.userAccuracy = L.circle(pos, {
+                                radius: accuracy,
+                                fillColor: '#3b82f6',
+                                fillOpacity: 0.1,
+                                color: '#3b82f6',
+                                weight: 1,
+                                opacity: 0.3
+                            }).addTo(map);
+
+                            // Center on user
+                            map.setView(pos, 17);
+                        } else {
+                            markers.userLocation.setLatLng(pos);
+                            if (markers.userAccuracy) {
+                                markers.userAccuracy.setLatLng(pos);
+                                markers.userAccuracy.setRadius(accuracy);
+                            }
+                        }
+                    },
+                    (error) => {
+                        btn.classList.remove('detail-location-btn--loading');
+                        Notifications.error('No se pudo obtener la ubicación');
+                        console.error('Geolocation error:', error);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 5000,
+                        timeout: 10000
+                    }
+                );
+            }
+
             // Initialize
             renderRoute();
 
             // Event listeners
             document.getElementById('btn-replay').addEventListener('click', toggleReplay);
+            document.getElementById('btn-reverse').addEventListener('click', toggleReverse);
+            document.getElementById('btn-my-location').addEventListener('click', toggleMyLocation);
             document.getElementById('btn-export-gpx').addEventListener('click', exportGPX);
             document.getElementById('btn-export-kml').addEventListener('click', exportKML);
             document.getElementById('btn-share').addEventListener('click', shareRoute);

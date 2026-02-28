@@ -103,6 +103,12 @@ export class UIController {
 	/** @type {boolean} If device orientation is supported */
 	#compassSupported = false;
 
+	/** @type {boolean} If battery is low (triggers power saving mode) */
+	#lowBatteryMode = false;
+
+	/** @type {number} Battery level threshold for low battery mode (0-1) */
+	#lowBatteryThreshold = 0.2;
+
 	/**
 	 * Crea una instancia de UIController.
 	 *
@@ -132,6 +138,7 @@ export class UIController {
 		this.#subscribeToEvents();
 		this.#updateUI();
 		this.#initConnectivityMonitoring();
+		this.#initBatteryMonitoring();
 		this.#initCompass();
 		this.#checkForPendingRoute();
 		this.#checkSimulationMode();
@@ -229,6 +236,12 @@ export class UIController {
 			// Connection indicators
 			networkIndicator: document.getElementById("network-indicator"),
 			gpsIndicator: document.getElementById("gps-indicator"),
+			// Battery indicator
+			batteryIndicator: document.getElementById("battery-indicator"),
+			batteryLabel: document.getElementById("battery-label"),
+			batteryLevelFill: document.getElementById("battery-level-fill"),
+			// Fullscreen button
+			fullscreenBtn: document.getElementById("fullscreen-btn"),
 			// Exit modal
 			exitModal: document.getElementById("exit-modal"),
 			exitSaveBtn: document.getElementById("btn-exit-save"),
@@ -336,6 +349,14 @@ export class UIController {
 		this.#elements.exitModal
 			?.querySelector(".modal__backdrop")
 			?.addEventListener("click", () => this.#hideExitModal());
+
+		// Fullscreen button
+		this.#elements.fullscreenBtn?.addEventListener("click", () =>
+			this.#toggleFullscreen(),
+		);
+		document.addEventListener("fullscreenchange", () =>
+			this.#onFullscreenChange(),
+		);
 
 		// Visibility change detection (for exit warning)
 		document.addEventListener("visibilitychange", () =>
@@ -1079,6 +1100,179 @@ export class UIController {
 			gpsIndicator.classList.add("connection-indicator--offline");
 			gpsIndicator.title = `GPS: Señal muy débil (±${Math.round(accuracy)}m)`;
 			accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+		}
+	}
+
+	/**
+	 * Inicializa el monitoreo de batería.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#initBatteryMonitoring() {
+		if (!("getBattery" in navigator)) {
+			// Battery API not supported, hide indicator
+			const { batteryIndicator } = this.#elements;
+			if (batteryIndicator) {
+				batteryIndicator.style.display = "none";
+			}
+			return;
+		}
+
+		navigator.getBattery().then((battery) => {
+			// Initial update
+			this.#updateBatteryIndicator(battery.level, battery.charging);
+
+			// Listen for changes
+			battery.addEventListener("levelchange", () => {
+				this.#updateBatteryIndicator(battery.level, battery.charging);
+			});
+
+			battery.addEventListener("chargingchange", () => {
+				this.#updateBatteryIndicator(battery.level, battery.charging);
+			});
+		});
+	}
+
+	/**
+	 * Actualiza el indicador de batería y activa/desactiva modo ahorro.
+	 *
+	 * @private
+	 * @param {number} level - Nivel de batería (0-1)
+	 * @param {boolean} charging - Si está cargando
+	 * @returns {void}
+	 */
+	#updateBatteryIndicator(level, charging) {
+		const { batteryIndicator, batteryLabel, batteryLevelFill } = this.#elements;
+		if (!batteryIndicator) return;
+
+		const percentage = Math.round(level * 100);
+
+		// Update label
+		if (batteryLabel) {
+			batteryLabel.textContent = `${percentage}%`;
+		}
+
+		// Update fill level (max width is 14, scale by level)
+		if (batteryLevelFill) {
+			batteryLevelFill.setAttribute("width", String(Math.round(14 * level)));
+		}
+
+		// Remove all state classes
+		batteryIndicator.classList.remove(
+			"battery-indicator--low",
+			"battery-indicator--medium",
+			"battery-indicator--high",
+			"battery-indicator--charging",
+		);
+
+		// Determine state
+		if (charging) {
+			batteryIndicator.classList.add("battery-indicator--charging");
+			batteryIndicator.title = `Batería: ${percentage}% (Cargando)`;
+			this.#disableLowBatteryMode();
+		} else if (level <= this.#lowBatteryThreshold) {
+			batteryIndicator.classList.add("battery-indicator--low");
+			batteryIndicator.title = `Batería baja: ${percentage}% - Modo ahorro activado`;
+			this.#enableLowBatteryMode();
+		} else if (level <= 0.5) {
+			batteryIndicator.classList.add("battery-indicator--medium");
+			batteryIndicator.title = `Batería: ${percentage}%`;
+			this.#disableLowBatteryMode();
+		} else {
+			batteryIndicator.classList.add("battery-indicator--high");
+			batteryIndicator.title = `Batería: ${percentage}%`;
+			this.#disableLowBatteryMode();
+		}
+	}
+
+	/**
+	 * Activa el modo de ahorro de batería reduciendo frecuencia GPS.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#enableLowBatteryMode() {
+		if (this.#lowBatteryMode) return;
+
+		this.#lowBatteryMode = true;
+
+		// Reduce GPS accuracy and allow older cached positions
+		this.#geoService.setOptions({
+			enableHighAccuracy: false,
+			maximumAge: 5000, // Allow 5 second old positions
+			timeout: 15000, // Longer timeout
+		});
+
+		Notifications.warning(
+			"Batería baja: Modo ahorro de energía activado. Precisión GPS reducida.",
+		);
+	}
+
+	/**
+	 * Desactiva el modo de ahorro de batería restaurando precisión GPS.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#disableLowBatteryMode() {
+		if (!this.#lowBatteryMode) return;
+
+		this.#lowBatteryMode = false;
+
+		// Restore high accuracy GPS
+		this.#geoService.setOptions({
+			enableHighAccuracy: true,
+			maximumAge: 0,
+			timeout: 10000,
+		});
+
+		Notifications.info("Batería recuperada: Precisión GPS restaurada.");
+	}
+
+	/**
+	 * Alterna el modo de pantalla completa.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#toggleFullscreen() {
+		if (!document.fullscreenElement) {
+			document.documentElement.requestFullscreen().catch((err) => {
+				Notifications.error(
+					`No se pudo activar pantalla completa: ${err.message}`,
+				);
+			});
+		} else {
+			document.exitFullscreen();
+		}
+	}
+
+	/**
+	 * Maneja el cambio de estado de pantalla completa.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#onFullscreenChange() {
+		const { fullscreenBtn } = this.#elements;
+		if (!fullscreenBtn) return;
+
+		const enterIcon = fullscreenBtn.querySelector(
+			".fullscreen-btn__icon--enter",
+		);
+		const exitIcon = fullscreenBtn.querySelector(".fullscreen-btn__icon--exit");
+
+		if (document.fullscreenElement) {
+			// In fullscreen
+			if (enterIcon) enterIcon.style.display = "none";
+			if (exitIcon) exitIcon.style.display = "block";
+			fullscreenBtn.title = "Salir de pantalla completa";
+		} else {
+			// Not in fullscreen
+			if (enterIcon) enterIcon.style.display = "block";
+			if (exitIcon) exitIcon.style.display = "none";
+			fullscreenBtn.title = "Pantalla completa";
 		}
 	}
 
