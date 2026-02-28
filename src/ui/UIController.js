@@ -24,7 +24,7 @@ import { ExportService } from "../core/ExportService.js";
 /**
  * @typedef {Object} UIElements
  * @property {HTMLElement} startBtn - Botón iniciar
- * @property {HTMLElement} stopBtn - Botón detener
+ * @property {HTMLElement} finishBtn - Botón terminar
  * @property {HTMLElement} saveBtn - Botón guardar
  * @property {HTMLElement} exportBtn - Botón exportar
  * @property {HTMLElement} distanceDisplay - Display de distancia
@@ -75,6 +75,9 @@ export class UIController {
 
 	/** @type {L.Marker|null} Marker de la posición actual */
 	#currentMarker = null;
+
+	/** @type {L.Marker[]} Markers de waypoints */
+	#waypointMarkers = [];
 
 	/** @type {boolean} Si está haciendo tracking activo */
 	#isTrackingActive = false;
@@ -188,8 +191,10 @@ export class UIController {
 	#cacheElements() {
 		this.#elements = {
 			startBtn: document.getElementById("btn-start"),
+			trackingActions: document.getElementById("tracking-actions"),
 			pauseBtn: document.getElementById("btn-pause"),
-			stopBtn: document.getElementById("btn-stop"),
+			resumeBtn: document.getElementById("btn-resume"),
+			finishBtn: document.getElementById("btn-finish"),
 			saveBtn: document.getElementById("btn-save"),
 			exportBtn: document.getElementById("btn-export"),
 			exportDropdown: document.getElementById("export-dropdown"),
@@ -199,9 +204,16 @@ export class UIController {
 			distanceDisplay: document.getElementById("distance"),
 			pointsDisplay: document.getElementById("points"),
 			statusDisplay: document.getElementById("status"),
+			statusIndicator: document.getElementById("status-indicator"),
 			routeNameInput: document.getElementById("route-name"),
 			elapsedTimeDisplay: document.getElementById("elapsed-time"),
 			speedDisplay: document.getElementById("speed"),
+			// Waypoint elements
+			waypointBtn: document.getElementById("btn-waypoint"),
+			waypointModal: document.getElementById("waypoint-modal"),
+			waypointNameInput: document.getElementById("waypoint-name"),
+			waypointSaveBtn: document.getElementById("btn-waypoint-save"),
+			waypointCancelBtn: document.getElementById("btn-waypoint-cancel"),
 		};
 	}
 
@@ -215,7 +227,7 @@ export class UIController {
 		const {
 			startBtn,
 			pauseBtn,
-			stopBtn,
+			resumeBtn,
 			saveBtn,
 			exportBtn,
 			exportDropdown,
@@ -223,10 +235,38 @@ export class UIController {
 		} = this.#elements;
 
 		startBtn?.addEventListener("click", () => this.startTracking());
-		pauseBtn?.addEventListener("click", () => this.togglePause());
-		stopBtn?.addEventListener("click", () => this.stopTracking());
+		pauseBtn?.addEventListener("click", () => this.pauseTracking());
+		resumeBtn?.addEventListener("click", () => this.resumeTracking());
+		this.#elements.finishBtn?.addEventListener("click", () => this.stopTracking());
 		saveBtn?.addEventListener("click", () => this.saveRoute());
 		locationBtn?.addEventListener("click", () => this.goToMyLocation());
+
+		// Waypoint handling
+		this.#elements.waypointBtn?.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.#showWaypointModal();
+		});
+		this.#elements.waypointSaveBtn?.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.#saveWaypoint();
+		});
+		this.#elements.waypointCancelBtn?.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.#hideWaypointModal();
+		});
+		this.#elements.waypointModal
+			?.querySelector(".modal__backdrop")
+			?.addEventListener("click", () => this.#hideWaypointModal());
+		this.#elements.waypointNameInput?.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				this.#saveWaypoint();
+			}
+			if (e.key === "Escape") this.#hideWaypointModal();
+		});
 
 		// Export dropdown handling
 		exportBtn?.addEventListener("click", (e) => {
@@ -336,7 +376,12 @@ export class UIController {
 			this.#simulator = null;
 			EventBus.emit("tracking:stopped", { timestamp: Date.now() });
 		} else {
-			this.#geoService.stopWatching();
+			// If paused, GPS is already stopped but we need to emit the event
+			if (this.#isPaused) {
+				EventBus.emit("tracking:stopped", { timestamp: Date.now() });
+			} else {
+				this.#geoService.stopWatching();
+			}
 		}
 	}
 
@@ -538,7 +583,7 @@ export class UIController {
 	 */
 	#onLocationError(err) {
 		Notifications.error(err.message);
-		this.#setStatus("Error de GPS");
+		this.#setStatus("Error de GPS", "stopped");
 	}
 
 	/**
@@ -553,7 +598,7 @@ export class UIController {
 		this.#trackingStartTime = Date.now();
 		this.#pausedTimeAccumulated = 0;
 		this.#setButtonsState(true);
-		this.#setStatus("Rastreando...");
+		this.#setStatus("Rastreando...", "active");
 
 		// Iniciar timer para actualizar tiempo cada segundo
 		this.#startTimer();
@@ -581,7 +626,7 @@ export class UIController {
 		this.#isTrackingActive = false;
 		this.#isPaused = false;
 		this.#setButtonsState(false);
-		this.#setStatus("Detenido");
+		this.#setStatus("Detenido", "stopped");
 
 		// Detener timer
 		this.#stopTimer();
@@ -634,11 +679,11 @@ export class UIController {
 		// Guardar tiempo transcurrido hasta ahora
 		this.#pausedTimeAccumulated += Date.now() - this.#trackingStartTime;
 
-		// Detener GPS (pero no finalizar la ruta)
+		// Detener GPS (pero no finalizar la ruta - no emitir evento)
 		if (this.#simulationMode && this.#simulator) {
 			this.#simulator.stop();
 		} else {
-			this.#geoService.stopWatching();
+			this.#geoService.stopWatching({ emitEvent: false });
 		}
 
 		// Detener timer
@@ -646,7 +691,7 @@ export class UIController {
 
 		// Actualizar UI
 		this.#updatePauseButton(true);
-		this.#setStatus("⏸ Pausado");
+		this.#setStatus("Pausado", "paused");
 		Notifications.info("Tracking pausado");
 	}
 
@@ -678,7 +723,7 @@ export class UIController {
 
 		// Actualizar UI
 		this.#updatePauseButton(false);
-		this.#setStatus("Rastreando...");
+		this.#setStatus("Rastreando...", "active");
 		Notifications.success("Tracking reanudado");
 	}
 
@@ -689,18 +734,28 @@ export class UIController {
 	 * @param {boolean} isPaused - Si está pausado
 	 */
 	#updatePauseButton(isPaused) {
-		const { pauseBtn } = this.#elements;
-		if (!pauseBtn) return;
+		const { startBtn, trackingActions, pauseBtn, resumeBtn, waypointBtn } = this.#elements;
 
-		if (isPaused) {
-			pauseBtn.innerHTML = '<span class="btn__icon">▶</span> Reanudar';
-			pauseBtn.classList.remove("btn--warning");
-			pauseBtn.classList.add("btn--success");
-		} else {
-			pauseBtn.innerHTML = '<span class="btn__icon">⏸</span> Pausar';
-			pauseBtn.classList.remove("btn--success");
-			pauseBtn.classList.add("btn--warning");
+		// While tracking:
+		// - trackingActions always visible
+		// - Inside: pauseBtn or resumeBtn (toggle based on isPaused)
+		// - finishBtn always visible
+		if (startBtn) startBtn.classList.add("fab--hidden");
+		if (trackingActions) trackingActions.style.display = "flex";
+		
+		// Toggle pause/resume using CSS classes for reliable hiding
+		// Also toggle disabled state
+		if (pauseBtn) {
+			pauseBtn.classList.toggle("fab--hidden", isPaused);
+			pauseBtn.disabled = isPaused;
 		}
+		if (resumeBtn) {
+			resumeBtn.classList.toggle("fab--hidden", !isPaused);
+			resumeBtn.disabled = !isPaused;
+		}
+		
+		// Keep waypoint button visible while tracking (paused or active)
+		if (waypointBtn) waypointBtn.style.display = "flex";
 	}
 
 	/**
@@ -803,23 +858,30 @@ export class UIController {
 	 * @returns {void}
 	 */
 	#setButtonsState(isTracking) {
-		const { startBtn, pauseBtn, stopBtn, saveBtn, exportBtn } = this.#elements;
+		const {
+			startBtn,
+			trackingActions,
+			pauseBtn,
+			resumeBtn,
+			saveBtn,
+			exportBtn,
+			waypointBtn,
+		} = this.#elements;
 
 		if (startBtn) startBtn.disabled = isTracking;
 		if (pauseBtn) pauseBtn.disabled = !isTracking;
-		if (stopBtn) stopBtn.disabled = !isTracking;
+		if (resumeBtn) resumeBtn.disabled = !isTracking;
 		if (saveBtn) saveBtn.disabled = isTracking;
 		if (exportBtn) exportBtn.disabled = isTracking;
 
-		// Mostrar/ocultar botones
-		if (startBtn) startBtn.style.display = isTracking ? "none" : "inline-flex";
-		if (pauseBtn) pauseBtn.style.display = isTracking ? "inline-flex" : "none";
-		if (stopBtn) stopBtn.style.display = isTracking ? "inline-flex" : "none";
-
-		// Resetear botón de pausa al estado inicial
-		if (isTracking && pauseBtn) {
-			this.#updatePauseButton(false);
-		}
+		// Mostrar/ocultar FAB buttons usando clases CSS
+		if (startBtn) startBtn.classList.toggle("fab--hidden", isTracking);
+		if (trackingActions) trackingActions.style.display = isTracking ? "flex" : "none";
+		// Within trackingActions: pauseBtn visible when tracking starts (not paused yet)
+		if (pauseBtn) pauseBtn.classList.toggle("fab--hidden", !isTracking);
+		if (resumeBtn) resumeBtn.classList.add("fab--hidden");
+		// Waypoint button only visible during tracking
+		if (waypointBtn) waypointBtn.style.display = isTracking ? "flex" : "none";
 	}
 
 	/**
@@ -827,11 +889,30 @@ export class UIController {
 	 *
 	 * @private
 	 * @param {string} text - Texto de estado
+	 * @param {'idle'|'active'|'paused'|'stopped'} [state='idle'] - Estado del indicador
 	 * @returns {void}
 	 */
-	#setStatus(text) {
+	#setStatus(text, state = "idle") {
 		if (this.#elements.statusDisplay) {
 			this.#elements.statusDisplay.textContent = text;
+		}
+
+		// Update status indicator classes
+		if (this.#elements.statusIndicator) {
+			const indicator = this.#elements.statusIndicator;
+			indicator.classList.remove(
+				"status-indicator--active",
+				"status-indicator--paused",
+				"status-indicator--stopped",
+			);
+
+			if (state === "active") {
+				indicator.classList.add("status-indicator--active");
+			} else if (state === "paused") {
+				indicator.classList.add("status-indicator--paused");
+			} else if (state === "stopped") {
+				indicator.classList.add("status-indicator--stopped");
+			}
 		}
 	}
 
@@ -843,8 +924,129 @@ export class UIController {
 	 */
 	#updateUI() {
 		this.#setButtonsState(false);
-		this.#setStatus("Listo");
+		this.#setStatus("Listo para iniciar");
 		this.#updateStats();
+	}
+
+	/**
+	 * Muestra el modal para agregar waypoint.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#showWaypointModal() {
+		const { waypointModal, waypointNameInput } = this.#elements;
+		if (waypointModal) {
+			waypointModal.style.display = "flex";
+			waypointNameInput?.focus();
+		}
+	}
+
+	/**
+	 * Oculta el modal de waypoint.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#hideWaypointModal() {
+		const { waypointModal, waypointNameInput } = this.#elements;
+		if (waypointModal) {
+			waypointModal.style.display = "none";
+			if (waypointNameInput) waypointNameInput.value = "";
+		}
+	}
+
+	/**
+	 * Guarda el waypoint actual.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#saveWaypoint() {
+		const { waypointNameInput } = this.#elements;
+		const name = waypointNameInput?.value?.trim();
+
+		if (!name) {
+			Notifications.warning("Ingresa un nombre para el punto");
+			return;
+		}
+
+		if (!this.#currentRoute) {
+			Notifications.error("No hay ruta activa");
+			this.#hideWaypointModal();
+			return;
+		}
+
+		// Get current position from last point
+		const lastPoint = this.#currentRoute.getLastPoint();
+		if (!lastPoint) {
+			Notifications.error("No hay posición disponible");
+			this.#hideWaypointModal();
+			return;
+		}
+
+		// Add waypoint to route
+		const waypoint = this.#currentRoute.addWaypoint(
+			lastPoint.lat,
+			lastPoint.lng,
+			name,
+		);
+
+		// Add marker to map
+		this.#addWaypointMarker(waypoint);
+
+		Notifications.success(`Punto marcado: ${name}`);
+		this.#hideWaypointModal();
+	}
+
+	/**
+	 * Agrega un marcador de waypoint al mapa.
+	 *
+	 * @private
+	 * @param {Object} waypoint - Datos del waypoint
+	 * @returns {void}
+	 */
+	#addWaypointMarker(waypoint) {
+		if (!this.#mapService) return;
+
+		const map = this.#mapService.getNativeMap();
+		if (!map) return;
+
+		// Custom icon for waypoint
+		const waypointIcon = L.divIcon({
+			className: "waypoint-marker",
+			html: `<div class="waypoint-marker__pin">
+				<svg width="24" height="24" viewBox="0 0 24 24" fill="#f59e0b" stroke="#fff" stroke-width="2">
+					<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+					<circle cx="12" cy="10" r="3" fill="#fff"/>
+				</svg>
+			</div>`,
+			iconSize: [24, 24],
+			iconAnchor: [12, 24],
+			popupAnchor: [0, -24],
+		});
+
+		const marker = L.marker([waypoint.lat, waypoint.lng], {
+			icon: waypointIcon,
+		})
+			.addTo(map)
+			.bindPopup(`<strong>${waypoint.name}</strong>`);
+
+		this.#waypointMarkers.push(marker);
+	}
+
+	/**
+	 * Limpia los marcadores de waypoints del mapa.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#clearWaypointMarkers() {
+		const map = this.#mapService?.getNativeMap();
+		if (map) {
+			this.#waypointMarkers.forEach((marker) => map.removeLayer(marker));
+		}
+		this.#waypointMarkers = [];
 	}
 
 	/**
@@ -865,9 +1067,10 @@ export class UIController {
 		this.#currentRoute = null;
 		this.#startMarker = null;
 		this.#currentMarker = null;
+		this.#clearWaypointMarkers();
 		this.#mapService.clear();
 		this.#updateStats();
-		this.#setStatus("Listo");
+		this.#setStatus("Listo para iniciar");
 	}
 
 	/**
@@ -929,11 +1132,10 @@ export class UIController {
 	 * @param {boolean} viewOnly - Si está en modo solo visualización
 	 */
 	#setViewOnlyMode(viewOnly) {
-		const { startBtn, stopBtn, saveBtn, exportBtn } = this.#elements;
+		const { startBtn, saveBtn, exportBtn } = this.#elements;
 
 		if (viewOnly) {
 			if (startBtn) startBtn.style.display = "none";
-			if (stopBtn) stopBtn.style.display = "none";
 			if (saveBtn) saveBtn.style.display = "none";
 			if (exportBtn) {
 				exportBtn.disabled = false;

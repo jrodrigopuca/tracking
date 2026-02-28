@@ -5,7 +5,8 @@
   "repository": "https://jrodrigopuca@github.com/jrodrigopuca/tracking.git",
   "source": [
     "src/index.html",
-    "src/track.html"
+    "src/track.html",
+    "src/route-detail.html"
   ],
   "scripts": {
     "start": "parcel --no-cache",

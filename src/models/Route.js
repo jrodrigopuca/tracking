@@ -21,10 +21,20 @@ import { DistanceCalculator } from "../core/DistanceCalculator.js";
  */
 
 /**
+ * @typedef {Object} WaypointData
+ * @property {string} id - Identificador único
+ * @property {number} lat - Latitud
+ * @property {number} lng - Longitud
+ * @property {string} name - Texto descriptivo
+ * @property {number} timestamp - Unix timestamp
+ */
+
+/**
  * @typedef {Object} RouteData
  * @property {string} id - Identificador único
  * @property {string} name - Nombre del recorrido
  * @property {Position[]} points - Array de posiciones
+ * @property {WaypointData[]} waypoints - Puntos de interés marcados
  * @property {string} createdAt - ISO timestamp de creación
  * @property {number} distance - Distancia total en km
  */
@@ -44,6 +54,9 @@ export class Route {
 
 	/** @type {Position[]} Puntos del recorrido */
 	points = [];
+
+	/** @type {WaypointData[]} Puntos de interés */
+	waypoints = [];
 
 	/** @type {string} Fecha de creación ISO */
 	createdAt;
@@ -75,6 +88,26 @@ export class Route {
 		};
 		this.points.push(point);
 		return point;
+	}
+
+	/**
+	 * Agrega un waypoint (punto de interés) al recorrido.
+	 *
+	 * @param {number} lat - Latitud en grados decimales
+	 * @param {number} lng - Longitud en grados decimales
+	 * @param {string} name - Texto descriptivo (máx 50 caracteres)
+	 * @returns {WaypointData} El waypoint agregado
+	 */
+	addWaypoint(lat, lng, name) {
+		const waypoint = {
+			id: crypto.randomUUID(),
+			lat,
+			lng,
+			name: (name || "").slice(0, 50).trim(),
+			timestamp: Date.now(),
+		};
+		this.waypoints.push(waypoint);
+		return waypoint;
 	}
 
 	/**
@@ -197,6 +230,7 @@ export class Route {
 			id: this.id,
 			name: this.name,
 			points: this.points,
+			waypoints: this.waypoints,
 			createdAt: this.createdAt,
 			distance: this.getDistance(),
 			duration: this.getElapsedTime(),
@@ -219,6 +253,7 @@ export class Route {
 
 		const route = new Route(data.name || "Sin nombre", data.id);
 		route.points = Array.isArray(data.points) ? data.points : [];
+		route.waypoints = Array.isArray(data.waypoints) ? data.waypoints : [];
 		route.createdAt = data.createdAt || new Date().toISOString();
 		return route;
 	}

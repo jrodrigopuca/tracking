@@ -147,14 +147,18 @@ export class GeoLocationService {
 	/**
 	 * Detiene el seguimiento de posición.
 	 *
+	 * @param {Object} [options] - Opciones
+	 * @param {boolean} [options.emitEvent=true] - Si debe emitir evento tracking:stopped
 	 * @returns {void}
 	 */
-	stopWatching() {
+	stopWatching({ emitEvent = true } = {}) {
 		if (this.#watchId !== null) {
 			navigator.geolocation.clearWatch(this.#watchId);
 			this.#watchId = null;
 			this.#isTracking = false;
-			EventBus.emit("tracking:stopped", { timestamp: Date.now() });
+			if (emitEvent) {
+				EventBus.emit("tracking:stopped", { timestamp: Date.now() });
+			}
 		}
 	}
 

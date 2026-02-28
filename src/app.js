@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
 	mapOptions: {
 		lat: -12.0464,
 		lng: -77.0428,
-		zoom: 18,
+		zoom: 19,
 	},
 };
 
@@ -129,7 +129,7 @@ class App {
 	async #centerOnUserLocation() {
 		try {
 			const pos = await this.geoService.getCurrentPosition();
-			this.mapService.centerOn(pos, 18);
+			this.mapService.centerOn(pos, 19);
 			console.log("📍 Mapa centrado en ubicación del usuario");
 		} catch (error) {
 			console.warn("No se pudo obtener ubicación del usuario:", error.message);

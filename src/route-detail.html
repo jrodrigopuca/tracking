@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
+        <meta name="theme-color" content="#0f172a" />
+        <title>Detalle de Ruta - Tracking GPS</title>
+        
+        <!-- Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+              integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+              crossorigin="" />
+        
+        <!-- App Styles -->
+        <link rel="stylesheet" href="./styles.css" />
+    </head>
+    <body class="detail-app">
+        <!-- Fullscreen Map -->
+        <div id="map" class="detail-map"></div>
+
+        <!-- Top Header -->
+        <header class="detail-header">
+            <a href="./index.html" class="detail-header__back" aria-label="Volver">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <div class="detail-header__info">
+                <h1 class="detail-header__title" id="route-name">Cargando...</h1>
+                <span class="detail-header__date" id="route-date"></span>
+            </div>
+            <button id="btn-menu" class="detail-header__btn" aria-label="Opciones">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="1"/>
+                    <circle cx="12" cy="5" r="1"/>
+                    <circle cx="12" cy="19" r="1"/>
+                </svg>
+            </button>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="detail-stats" id="detail-stats">
+            <div class="detail-stat">
+                <svg class="detail-stat__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+                <span class="detail-stat__value" id="stat-distance">0.00</span>
+                <span class="detail-stat__label">km</span>
+            </div>
+            <div class="detail-stat">
+                <svg class="detail-stat__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span class="detail-stat__value" id="stat-duration">--:--</span>
+                <span class="detail-stat__label">duración</span>
+            </div>
+            <div class="detail-stat">
+                <svg class="detail-stat__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="10" r="3"/>
+                    <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/>
+                </svg>
+                <span class="detail-stat__value" id="stat-points">0</span>
+                <span class="detail-stat__label">puntos</span>
+            </div>
+            <div class="detail-stat" id="stat-waypoints-container" style="display: none;">
+                <svg class="detail-stat__icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span class="detail-stat__value" id="stat-waypoints">0</span>
+                <span class="detail-stat__label">marcas</span>
+            </div>
+        </div>
+
+        <!-- Replay Controls -->
+        <div class="replay-controls" id="replay-controls">
+            <button id="btn-replay" class="replay-btn" aria-label="Reproducir recorrido">
+                <svg class="replay-btn__icon replay-btn__icon--play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg class="replay-btn__icon replay-btn__icon--pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                </svg>
+            </button>
+            <div class="replay-progress">
+                <div class="replay-progress__bar" id="replay-progress-bar"></div>
+            </div>
+            <span class="replay-time" id="replay-time">0%</span>
+        </div>
+
+        <!-- Bottom Panel -->
+        <div class="detail-panel">
+            <div class="detail-actions">
+                <button id="btn-export-gpx" class="detail-action">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                        <polyline points="17,8 12,3 7,8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span>GPX</span>
+                </button>
+                <button id="btn-export-kml" class="detail-action">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14,2 14,8 20,8"/>
+                    </svg>
+                    <span>KML</span>
+                </button>
+                <button id="btn-share" class="detail-action">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="18" cy="5" r="3"/>
+                        <circle cx="6" cy="12" r="3"/>
+                        <circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                    <span>Compartir</span>
+                </button>
+                <button id="btn-delete" class="detail-action detail-action--danger">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3,6 5,6 21,6"/>
+                        <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    <span>Eliminar</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Leaflet JS -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+                integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+                crossorigin=""></script>
+
+        <script type="module">
+            import { StorageService } from './core/StorageService.js';
+            import { ExportService } from './core/ExportService.js';
+            import { Notifications } from './ui/Notifications.js';
+
+            // Main initialization wrapped in async IIFE
+            (async function init() {
+                // Get route ID from URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const routeId = urlParams.get('id');
+
+                if (!routeId) {
+                    window.location.href = './index.html';
+                    return;
+                }
+
+                const storage = new StorageService('tracking_routes');
+                const route = storage.getById(routeId);
+
+                console.log('Route ID:', routeId);
+                console.log('Route data:', route);
+
+                if (!route) {
+                    Notifications.error('Ruta no encontrada');
+                    setTimeout(() => window.location.href = './index.html', 1500);
+                    return;
+                }
+
+                // Initialize map
+                const map = L.map('map', {
+                    zoomControl: false
+                }).setView([-12.0464, -77.0428], 19);
+
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    maxZoom: 19
+                }).addTo(map);
+
+            // Route polyline
+            let polyline = null;
+            let markers = { start: null, end: null, current: null };
+            let replayInterval = null;
+            let isPlaying = false;
+            let replayIndex = 0;
+
+            /**
+             * Format duration from start/end timestamps
+             */
+            function formatDuration(points) {
+                if (!points || points.length < 2) return '--:--';
+                const start = points[0].timestamp;
+                const end = points[points.length - 1].timestamp;
+                if (!start || !end) return '--:--';
+                
+                const diffMs = new Date(end) - new Date(start);
+                const minutes = Math.floor(diffMs / 60000);
+                const hours = Math.floor(minutes / 60);
+                const mins = minutes % 60;
+                
+                return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+            }
+
+            /**
+             * Format date to readable string
+             */
+            function formatDate(isoDate) {
+                if (!isoDate) return '';
+                const date = new Date(isoDate);
+                return date.toLocaleDateString('es-PE', {
+                    weekday: 'long',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
+            }
+
+            /**
+             * Render route on map
+             */
+            function renderRoute() {
+                if (!route || !route.points || route.points.length === 0) {
+                    document.getElementById('route-name').textContent = 'Sin datos';
+                    return;
+                }
+
+                // Update header
+                document.getElementById('route-name').textContent = route.name || 'Recorrido';
+                document.getElementById('route-date').textContent = formatDate(route.createdAt);
+
+                // Update stats
+                document.getElementById('stat-distance').textContent = (route.distance || 0).toFixed(2);
+                document.getElementById('stat-points').textContent = route.points.length;
+                document.getElementById('stat-duration').textContent = formatDuration(route.points);
+
+                // Show waypoint count if any
+                const waypointCount = route.waypoints?.length || 0;
+                if (waypointCount > 0) {
+                    document.getElementById('stat-waypoints-container').style.display = 'flex';
+                    document.getElementById('stat-waypoints').textContent = waypointCount;
+                }
+
+                // Draw polyline
+                const latlngs = route.points.map(p => [p.lat, p.lng]);
+                
+                polyline = L.polyline(latlngs, {
+                    color: '#22c55e',
+                    weight: 4,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }).addTo(map);
+
+                // Start marker
+                markers.start = L.circleMarker(latlngs[0], {
+                    radius: 10,
+                    fillColor: '#22c55e',
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup('Inicio');
+
+                // End marker
+                markers.end = L.circleMarker(latlngs[latlngs.length - 1], {
+                    radius: 10,
+                    fillColor: '#ef4444',
+                    color: '#fff',
+                    weight: 2,
+                    fillOpacity: 1
+                }).addTo(map).bindPopup('Fin');
+
+                // Waypoint markers
+                if (route.waypoints && route.waypoints.length > 0) {
+                    route.waypoints.forEach(wp => {
+                        const waypointIcon = L.divIcon({
+                            className: 'waypoint-marker',
+                            html: `<div class="waypoint-marker__pin">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="#f59e0b" stroke="#fff" stroke-width="2">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                                    <circle cx="12" cy="10" r="3" fill="#fff"/>
+                                </svg>
+                            </div>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 24],
+                            popupAnchor: [0, -24],
+                        });
+
+                        L.marker([wp.lat, wp.lng], { icon: waypointIcon })
+                            .addTo(map)
+                            .bindPopup(`<strong>${wp.name}</strong>`);
+                    });
+                }
+
+                // Fit map to route
+                map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+            }
+
+            /**
+             * Replay animation
+             */
+            function toggleReplay() {
+                const playIcon = document.querySelector('.replay-btn__icon--play');
+                const pauseIcon = document.querySelector('.replay-btn__icon--pause');
+                const progressBar = document.getElementById('replay-progress-bar');
+                const timeDisplay = document.getElementById('replay-time');
+
+                if (isPlaying) {
+                    // Pause
+                    clearInterval(replayInterval);
+                    isPlaying = false;
+                    playIcon.style.display = '';
+                    pauseIcon.style.display = 'none';
+                    return;
+                }
+
+                // Start/Resume
+                isPlaying = true;
+                playIcon.style.display = 'none';
+                pauseIcon.style.display = '';
+
+                if (replayIndex >= route.points.length - 1) {
+                    replayIndex = 0;
+                    if (markers.current) {
+                        map.removeLayer(markers.current);
+                        markers.current = null;
+                    }
+                }
+
+                const latlngs = route.points.map(p => [p.lat, p.lng]);
+
+                replayInterval = setInterval(() => {
+                    if (replayIndex >= latlngs.length) {
+                        clearInterval(replayInterval);
+                        isPlaying = false;
+                        playIcon.style.display = '';
+                        pauseIcon.style.display = 'none';
+                        replayIndex = 0;
+                        return;
+                    }
+
+                    const pos = latlngs[replayIndex];
+                    
+                    if (!markers.current) {
+                        markers.current = L.circleMarker(pos, {
+                            radius: 8,
+                            fillColor: '#3b82f6',
+                            color: '#fff',
+                            weight: 2,
+                            fillOpacity: 1
+                        }).addTo(map);
+                    } else {
+                        markers.current.setLatLng(pos);
+                    }
+
+                    // Update progress
+                    const progress = ((replayIndex + 1) / latlngs.length) * 100;
+                    progressBar.style.width = `${progress}%`;
+                    timeDisplay.textContent = `${Math.round(progress)}%`;
+
+                    // Pan map to follow marker
+                    if (!map.getBounds().contains(pos)) {
+                        map.panTo(pos);
+                    }
+
+                    replayIndex++;
+                }, 100); // Adjust speed here (ms per point)
+            }
+
+            /**
+             * Export handlers
+             */
+            function exportGPX() {
+                const gpx = ExportService.toGPX(route.points, route.name);
+                downloadFile(gpx, `${route.name || 'ruta'}.gpx`, 'application/gpx+xml');
+                Notifications.success('GPX exportado');
+            }
+
+            function exportKML() {
+                const kml = ExportService.toKML(route.points, route.name);
+                downloadFile(kml, `${route.name || 'ruta'}.kml`, 'application/vnd.google-earth.kml+xml');
+                Notifications.success('KML exportado');
+            }
+
+            function downloadFile(content, filename, mimeType) {
+                const blob = new Blob([content], { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            async function shareRoute() {
+                if (navigator.share) {
+                    try {
+                        const gpx = ExportService.toGPX(route.points, route.name);
+                        const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+                        const file = new File([blob], `${route.name || 'ruta'}.gpx`, { type: 'application/gpx+xml' });
+                        
+                        await navigator.share({
+                            title: route.name || 'Mi Recorrido',
+                            text: `Recorrido de ${(route.distance || 0).toFixed(2)} km`,
+                            files: [file]
+                        });
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            // Fallback to Google Maps link
+                            const url = ExportService.toGoogleMapsURL(route.points);
+                            window.open(url, '_blank');
+                        }
+                    }
+                } else {
+                    // Fallback
+                    const url = ExportService.toGoogleMapsURL(route.points);
+                    window.open(url, '_blank');
+                }
+            }
+
+            function deleteRoute() {
+                if (confirm('¿Eliminar este recorrido?')) {
+                    storage.delete(routeId);
+                    Notifications.success('Recorrido eliminado');
+                    setTimeout(() => window.location.href = './index.html', 500);
+                }
+            }
+
+            // Initialize
+            renderRoute();
+
+            // Event listeners
+            document.getElementById('btn-replay').addEventListener('click', toggleReplay);
+            document.getElementById('btn-export-gpx').addEventListener('click', exportGPX);
+            document.getElementById('btn-export-kml').addEventListener('click', exportKML);
+            document.getElementById('btn-share').addEventListener('click', shareRoute);
+            document.getElementById('btn-delete').addEventListener('click', deleteRoute);
+            })();
+        </script>
+    </body>
+</html>

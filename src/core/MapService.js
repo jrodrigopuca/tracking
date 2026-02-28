@@ -24,7 +24,7 @@ import { EventBus } from "./EventBus.js";
  * @typedef {Object} MapOptions
  * @property {number} [lat=-12.0464] - Latitud inicial
  * @property {number} [lng=-77.0428] - Longitud inicial
- * @property {number} [zoom=18] - Nivel de zoom inicial
+ * @property {number} [zoom=19] - Nivel de zoom inicial
  */
 
 /**
@@ -57,7 +57,7 @@ export class MapService {
 	 */
 	constructor(containerId, options = {}) {
 		this.#containerId = containerId;
-		const { lat = -12.0464, lng = -77.0428, zoom = 18 } = options;
+		const { lat = -12.0464, lng = -77.0428, zoom = 19 } = options;
 
 		this.#map = L.map(containerId).setView([lat, lng], zoom);
 		this.#createCustomIcons();

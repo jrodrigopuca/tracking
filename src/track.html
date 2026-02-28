@@ -2,8 +2,9 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="initial-scale=1.0, width=device-width" />
-        <title>Seguimiento de Recorrido</title>
+        <meta name="viewport" content="initial-scale=1.0, width=device-width, viewport-fit=cover" />
+        <meta name="theme-color" content="#0f172a" />
+        <title>Tracking GPS</title>
         
         <!-- Leaflet CSS -->
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
@@ -13,111 +14,193 @@
         <!-- App Styles -->
         <link rel="stylesheet" href="./styles.css" />
     </head>
-    <body>
-        <header class="header">
-            <h1 class="header__title">Tracking GPS</h1>
-            <a href="./index.html" class="header__back">← Volver</a>
+    <body class="tracking-app">
+        <!-- Fullscreen Map -->
+        <div id="map" class="tracking-map"></div>
+
+        <!-- Top Stats Bar -->
+        <header class="tracking-header">
+            <a href="./index.html" class="tracking-header__back" aria-label="Volver">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <div class="tracking-header__stats">
+                <div class="stat-pill">
+                    <span class="stat-pill__value" id="elapsed-time">00:00:00</span>
+                    <span class="stat-pill__label">TIEMPO</span>
+                </div>
+                <div class="stat-pill stat-pill--primary">
+                    <span class="stat-pill__value"><span id="distance">0.00</span></span>
+                    <span class="stat-pill__label">KM</span>
+                </div>
+                <div class="stat-pill">
+                    <span class="stat-pill__value"><span id="speed">0.0</span></span>
+                    <span class="stat-pill__label">KM/H</span>
+                </div>
+            </div>
+            <button id="btn-location" class="tracking-header__btn" aria-label="Mi ubicación">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+                </svg>
+            </button>
         </header>
 
-        <main class="main">
-            <!-- Map Container -->
-            <div id="map" class="map"></div>
+        <!-- Floating Action Button (FAB) -->
+        <div class="fab-container">
+            <!-- Estado: Inicial -->
+            <button id="btn-start" class="fab fab--start" aria-label="Iniciar tracking">
+                <svg class="fab__icon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            </button>
+            <!-- Estado: Activo (rastreando o pausado) -->
+            <div id="tracking-actions" class="fab-group" style="display: none;">
+                <!-- Botón principal: alterna entre Pausar y Reanudar -->
+                <button id="btn-pause" class="fab fab--pause" aria-label="Pausar">
+                    <svg class="fab__icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                    </svg>
+                </button>
+                <button id="btn-resume" class="fab fab--resume fab--hidden" aria-label="Reanudar">
+                    <svg class="fab__icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+                <!-- Botón terminar: siempre visible una vez iniciado -->
+                <button id="btn-finish" class="fab fab--finish" aria-label="Terminar">
+                    <svg class="fab__icon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="6" width="12" height="12" rx="2"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
 
-            <!-- Controls Panel -->
-            <div class="controls">
-                <div class="controls__input-group">
-                    <label for="route-name" class="controls__label">Nombre del recorrido</label>
-                    <input 
-                        type="text" 
-                        id="route-name" 
-                        class="controls__input" 
-                        placeholder="Mi recorrido"
-                        maxlength="50"
-                    />
-                </div>
+        <!-- Bottom Panel -->
+        <div class="bottom-panel" id="bottom-panel">
+            <div class="bottom-panel__handle"></div>
+            
+            <!-- Status Indicator -->
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-indicator__dot"></span>
+                <span class="status-indicator__text" id="status">Listo para iniciar</span>
+            </div>
 
-                <div class="controls__buttons">
-                    <button id="btn-start" class="btn btn--primary">
-                        <span class="btn__icon">▶</span>
-                        Iniciar
+            <!-- Route Name Input -->
+            <div class="route-input">
+                <input 
+                    type="text" 
+                    id="route-name" 
+                    class="route-input__field" 
+                    placeholder="Nombre del recorrido..."
+                    maxlength="50"
+                />
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button id="btn-waypoint" class="action-btn action-btn--waypoint" style="display: none;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
+                    </svg>
+                    <span>Marcar</span>
+                </button>
+                <button id="btn-save" class="action-btn action-btn--save" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                        <polyline points="17,21 17,13 7,13 7,21"/>
+                        <polyline points="7,3 7,8 15,8"/>
+                    </svg>
+                    <span>Guardar</span>
+                </button>
+                
+                <!-- Export Dropdown -->
+                <div class="dropdown" id="export-dropdown">
+                    <button id="btn-export" class="action-btn action-btn--export dropdown__trigger" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="17,8 12,3 7,8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <span>Exportar</span>
+                        <svg class="dropdown__arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6,9 12,15 18,9"/>
+                        </svg>
                     </button>
-                    <button id="btn-pause" class="btn btn--warning" style="display: none;">
-                        <span class="btn__icon">⏸</span>
-                        Pausar
-                    </button>
-                    <button id="btn-stop" class="btn btn--danger" style="display: none;">
-                        <span class="btn__icon">◼</span>
-                        Detener
-                    </button>
-                    <button id="btn-save" class="btn btn--success" disabled>
-                        <span class="btn__icon">💾</span>
-                        Guardar
-                    </button>
-                    
-                    <!-- Export Dropdown -->
-                    <div class="dropdown" id="export-dropdown">
-                        <button id="btn-export" class="btn btn--secondary dropdown__trigger" disabled>
-                            <span class="btn__icon">📤</span>
-                            Exportar
-                            <span class="dropdown__arrow">▼</span>
+                    <div class="dropdown__menu dropdown__menu--top">
+                        <button class="dropdown__item" data-export="gpx">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                            </svg>
+                            GPX
                         </button>
-                        <div class="dropdown__menu">
-                            <button class="dropdown__item" data-export="gpx">
-                                <span class="dropdown__icon">📄</span>
-                                Descargar GPX
-                            </button>
-                            <button class="dropdown__item" data-export="kml">
-                                <span class="dropdown__icon">🌍</span>
-                                Descargar KML
-                            </button>
-                            <hr class="dropdown__divider" />
-                            <button class="dropdown__item" data-export="google">
-                                <span class="dropdown__icon">🗺️</span>
-                                Abrir en Google Maps
-                            </button>
-                            <button class="dropdown__item" data-export="apple">
-                                <span class="dropdown__icon">🍎</span>
-                                Abrir en Apple Maps
-                            </button>
-                            <hr class="dropdown__divider" id="share-divider" style="display: none;" />
-                            <button class="dropdown__item" data-export="share" id="btn-share" style="display: none;">
-                                <span class="dropdown__icon">📲</span>
-                                Compartir...
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <button id="btn-location" class="btn btn--secondary">
-                        <span class="btn__icon">📍</span>
-                        Mi ubicación
-                    </button>
-                </div>
-
-                <!-- Stats Panel -->
-                <div class="stats">
-                    <div class="stats__item">
-                        <span class="stats__label">Distancia</span>
-                        <span class="stats__value"><span id="distance">0.00</span> km</span>
-                    </div>
-                    <div class="stats__item">
-                        <span class="stats__label">Tiempo</span>
-                        <span class="stats__value stats__value--time" id="elapsed-time">00:00:00</span>
-                    </div>
-                    <div class="stats__item">
-                        <span class="stats__label">Velocidad</span>
-                        <span class="stats__value"><span id="speed">0.0</span> km/h</span>
-                    </div>
-                    <div class="stats__item">
-                        <span class="stats__label">Puntos</span>
-                        <span class="stats__value" id="points">0</span>
-                    </div>
-                    <div class="stats__item">
-                        <span class="stats__label">Estado</span>
-                        <span class="stats__value stats__value--status" id="status">Listo</span>
+                        <button class="dropdown__item" data-export="kml">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                            </svg>
+                            KML
+                        </button>
+                        <hr class="dropdown__divider" />
+                        <button class="dropdown__item" data-export="google">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="3,11 22,2 13,21 11,13 3,11"/>
+                            </svg>
+                            Google Maps
+                        </button>
+                        <button class="dropdown__item" data-export="apple">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            Apple Maps
+                        </button>
+                        <hr class="dropdown__divider" id="share-divider" style="display: none;" />
+                        <button class="dropdown__item" data-export="share" id="btn-share" style="display: none;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="5" r="3"/>
+                                <circle cx="6" cy="12" r="3"/>
+                                <circle cx="18" cy="19" r="3"/>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                            </svg>
+                            Compartir
+                        </button>
                     </div>
                 </div>
             </div>
-        </main>
+
+            <!-- Extra Stats (collapsed by default) -->
+            <div class="extra-stats">
+                <div class="extra-stats__item">
+                    <span class="extra-stats__value" id="points">0</span>
+                    <span class="extra-stats__label">Puntos GPS</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waypoint Modal -->
+        <div class="modal" id="waypoint-modal" style="display: none;">
+            <div class="modal__backdrop"></div>
+            <div class="modal__content">
+                <h3 class="modal__title">Marcar punto de interés</h3>
+                <input 
+                    type="text" 
+                    id="waypoint-name" 
+                    class="modal__input" 
+                    placeholder="Ej: Mirador, Fuente de agua..."
+                    maxlength="50"
+                    autofocus
+                />
+                <div class="modal__actions">
+                    <button type="button" id="btn-waypoint-cancel" class="modal__btn modal__btn--cancel">Cancelar</button>
+                    <button type="button" id="btn-waypoint-save" class="modal__btn modal__btn--save">Guardar</button>
+                </div>
+            </div>
+        </div>
 
         <!-- Leaflet JS -->
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 

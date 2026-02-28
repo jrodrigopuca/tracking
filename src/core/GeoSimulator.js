@@ -6,6 +6,56 @@
  */
 
 /**
+ * Modos de velocidad para simulación realista.
+ * @type {Object}
+ */
+const PACE_MODES = {
+	walking: {
+		name: "Caminando",
+		minSpeed: 1.2, // m/s (~4.3 km/h)
+		maxSpeed: 1.5, // m/s (~5.4 km/h)
+		minDuration: 15, // segundos mínimo en este modo
+		maxDuration: 45, // segundos máximo
+		emoji: "🚶",
+	},
+	jogging: {
+		name: "Trotando",
+		minSpeed: 2.2, // m/s (~8 km/h)
+		maxSpeed: 3.0, // m/s (~11 km/h)
+		minDuration: 10,
+		maxDuration: 30,
+		emoji: "🏃",
+	},
+	running: {
+		name: "Corriendo",
+		minSpeed: 3.5, // m/s (~12.5 km/h)
+		maxSpeed: 5.0, // m/s (~18 km/h)
+		minDuration: 5,
+		maxDuration: 20,
+		emoji: "💨",
+	},
+	resting: {
+		name: "Descansando",
+		minSpeed: 0,
+		maxSpeed: 0.3, // pequeño movimiento mientras descansa
+		minDuration: 5,
+		maxDuration: 15,
+		emoji: "⏸️",
+	},
+};
+
+/**
+ * Transiciones naturales entre modos (no salta de caminar a correr directamente).
+ * @type {Object}
+ */
+const PACE_TRANSITIONS = {
+	walking: ["walking", "walking", "jogging", "resting"], // 50% seguir, 25% trotar, 25% descansar
+	jogging: ["jogging", "walking", "running", "jogging"], // 50% seguir, 25% caminar, 25% correr
+	running: ["running", "jogging", "jogging", "running"], // 50% seguir, 50% bajar a trotar
+	resting: ["walking", "walking", "resting", "jogging"], // 50% caminar, 25% seguir, 25% trotar
+};
+
+/**
  * Simulador de geolocalización para testing.
  * Genera posiciones GPS simuladas siguiendo un patrón configurable.
  *
@@ -50,16 +100,25 @@ export class GeoSimulator {
 	/** @type {Object|null} Ciudad seleccionada */
 	#selectedCity = null;
 
+	/** @type {string} Modo de velocidad actual */
+	#currentPace = "walking";
+
+	/** @type {number} Velocidad actual en m/s */
+	#currentSpeed = 1.4;
+
+	/** @type {number} Tiempo restante en el modo actual (en ticks) */
+	#paceTimeRemaining = 0;
+
 	/** @type {Object} Configuración */
 	#config = {
 		/** Intervalo entre puntos en ms */
 		interval: 1000,
-		/** Velocidad en metros por segundo (caminando ~1.4 m/s) */
-		speed: 1.4,
 		/** Variación aleatoria de dirección (radianes) */
 		directionVariance: 0.3,
 		/** Precisión simulada en metros */
 		accuracy: 10,
+		/** Habilitar cambio dinámico de velocidad */
+		dynamicPace: true,
 	};
 
 	/**
@@ -118,6 +177,11 @@ export class GeoSimulator {
 			this.stop();
 		}
 
+		// Inicializar modo de velocidad solo si es dinámico
+		if (this.#config.dynamicPace) {
+			this.#selectNewPace();
+		}
+
 		// Emitir posición inicial
 		callback(this.#createPositionObject());
 
@@ -126,7 +190,10 @@ export class GeoSimulator {
 			callback(this.#createPositionObject());
 		}, this.#config.interval);
 
-		console.log("🎮 GeoSimulator started");
+		const paceInfo = PACE_MODES[this.#currentPace];
+		console.log(
+			`🎮 GeoSimulator started in ${this.#selectedCity.name} ${paceInfo?.emoji || "🚶"}`,
+		);
 	}
 
 	/**
@@ -157,12 +224,23 @@ export class GeoSimulator {
 	 * @private
 	 */
 	#updatePosition() {
-		// Variar dirección aleatoriamente (simula giros naturales)
-		this.#direction +=
-			(Math.random() - 0.5) * 2 * this.#config.directionVariance;
+		// Actualizar modo de velocidad si es dinámico
+		if (this.#config.dynamicPace) {
+			this.#paceTimeRemaining--;
+			if (this.#paceTimeRemaining <= 0) {
+				this.#selectNewPace();
+			}
+		}
 
-		// Calcular desplazamiento
-		const distanceMeters = this.#config.speed * (this.#config.interval / 1000);
+		// Variar dirección aleatoriamente (simula giros naturales)
+		// Más variación cuando se va más lento
+		const directionVariance =
+			this.#config.directionVariance * (1 + (2 - this.#currentSpeed) * 0.3);
+		this.#direction += (Math.random() - 0.5) * 2 * directionVariance;
+
+		// Calcular desplazamiento con velocidad actual
+		const distanceMeters =
+			this.#currentSpeed * (this.#config.interval / 1000);
 
 		// Convertir a grados (aproximación: 1 grado ≈ 111,320 metros)
 		const latChange = (distanceMeters * Math.cos(this.#direction)) / 111320;
@@ -175,6 +253,39 @@ export class GeoSimulator {
 			lat: this.#currentPosition.lat + latChange,
 			lng: this.#currentPosition.lng + lngChange,
 		};
+	}
+
+	/**
+	 * Selecciona un nuevo modo de velocidad.
+	 *
+	 * @private
+	 */
+	#selectNewPace() {
+		// Elegir siguiente modo basado en transiciones naturales
+		const transitions = PACE_TRANSITIONS[this.#currentPace];
+		const nextPace = transitions[Math.floor(Math.random() * transitions.length)];
+		const mode = PACE_MODES[nextPace];
+
+		// Calcular velocidad aleatoria dentro del rango del modo
+		this.#currentSpeed =
+			mode.minSpeed + Math.random() * (mode.maxSpeed - mode.minSpeed);
+
+		// Calcular duración en ticks (segundos / intervalo)
+		const durationSeconds =
+			mode.minDuration +
+			Math.random() * (mode.maxDuration - mode.minDuration);
+		this.#paceTimeRemaining = Math.round(
+			durationSeconds / (this.#config.interval / 1000),
+		);
+
+		// Log solo si cambió de modo
+		if (nextPace !== this.#currentPace) {
+			console.log(
+				`${mode.emoji} Cambio a: ${mode.name} (${(this.#currentSpeed * 3.6).toFixed(1)} km/h)`,
+			);
+		}
+
+		this.#currentPace = nextPace;
 	}
 
 	/**
@@ -193,12 +304,41 @@ export class GeoSimulator {
 	}
 
 	/**
-	 * Configura velocidad de simulación.
+	 * Configura velocidad de simulación (desactiva modo dinámico).
 	 *
 	 * @param {number} metersPerSecond - Velocidad en m/s
 	 */
 	setSpeed(metersPerSecond) {
-		this.#config.speed = metersPerSecond;
+		this.#currentSpeed = metersPerSecond;
+		this.#config.dynamicPace = false;
+	}
+
+	/**
+	 * Habilita/deshabilita el cambio dinámico de velocidad.
+	 *
+	 * @param {boolean} enabled - True para habilitar
+	 */
+	setDynamicPace(enabled) {
+		this.#config.dynamicPace = enabled;
+		if (enabled) {
+			this.#selectNewPace();
+		}
+	}
+
+	/**
+	 * Obtiene información del modo actual.
+	 *
+	 * @returns {Object} Modo actual con nombre, velocidad, etc.
+	 */
+	getCurrentPaceInfo() {
+		const mode = PACE_MODES[this.#currentPace];
+		return {
+			mode: this.#currentPace,
+			name: mode.name,
+			emoji: mode.emoji,
+			speed: this.#currentSpeed,
+			speedKmh: this.#currentSpeed * 3.6,
+		};
 	}
 
 	/**

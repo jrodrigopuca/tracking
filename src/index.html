@@ -2,37 +2,69 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta name="theme-color" content="#0f172a" />
         <title>Tracking GPS - Dashboard</title>
         <link rel="stylesheet" href="./styles.css" />
     </head>
-    <body>
-        <header class="header">
-            <h1 class="header__title">🗺️ Tracking GPS</h1>
+    <body class="dashboard-app">
+        <!-- Header -->
+        <header class="dash-header">
+            <div class="dash-header__brand">
+                <svg class="dash-header__icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="10" r="3"/>
+                    <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/>
+                </svg>
+                <h1 class="dash-header__title">Tracking GPS</h1>
+            </div>
         </header>
 
-        <main class="main main--dashboard">
-            <section class="dashboard">
-                <div class="dashboard__actions">
-                    <a href="./track.html" class="btn btn--primary btn--large">
-                        <span class="btn__icon">➕</span>
-                        Nuevo Recorrido
-                    </a>
-                    
-                    <label class="btn btn--secondary btn--large">
-                        <span class="btn__icon">📥</span>
-                        Importar JSON
+        <!-- Main Content -->
+        <main class="dash-main">
+            <!-- Stats Summary -->
+            <section class="dash-stats">
+                <div class="dash-stat">
+                    <span class="dash-stat__value" id="total-routes">0</span>
+                    <span class="dash-stat__label">Recorridos</span>
+                </div>
+                <div class="dash-stat">
+                    <span class="dash-stat__value" id="total-distance">0</span>
+                    <span class="dash-stat__label">km totales</span>
+                </div>
+                <div class="dash-stat">
+                    <span class="dash-stat__value" id="total-points">0</span>
+                    <span class="dash-stat__label">Puntos GPS</span>
+                </div>
+            </section>
+
+            <!-- Routes Section -->
+            <section class="dash-section">
+                <div class="dash-section__header">
+                    <h2 class="dash-section__title">Mis Recorridos</h2>
+                    <label class="dash-import-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <span>Importar</span>
                         <input type="file" id="file-input" accept=".json" hidden />
                     </label>
                 </div>
-
-                <h2 class="dashboard__subtitle">Mis Recorridos</h2>
                 
-                <div id="routes-list" class="routes-list">
+                <div id="routes-list" class="routes-grid">
                     <!-- Routes loaded dynamically -->
                 </div>
             </section>
         </main>
+
+        <!-- FAB: New Route -->
+        <a href="./track.html" class="dash-fab" aria-label="Nuevo Recorrido">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </a>
 
         <script type="module">
             import { StorageService } from './core/StorageService.js';
@@ -43,36 +75,73 @@
             const storage = new StorageService('tracking_routes');
 
             /**
+             * Actualiza las estadísticas del dashboard
+             */
+            function updateStats(routes) {
+                const totalRoutes = routes.length;
+                const totalDistance = routes.reduce((sum, r) => sum + (r.distance || 0), 0);
+                const totalPoints = routes.reduce((sum, r) => sum + (r.points?.length || 0), 0);
+
+                document.getElementById('total-routes').textContent = totalRoutes;
+                document.getElementById('total-distance').textContent = totalDistance.toFixed(1);
+                document.getElementById('total-points').textContent = totalPoints;
+            }
+
+            /**
              * Renderiza la lista de recorridos
              */
             function renderRoutes() {
                 const routes = storage.getAll();
                 const container = document.getElementById('routes-list');
 
+                updateStats(routes);
+
                 if (routes.length === 0) {
                     container.innerHTML = `
-                        <div class="routes-list__empty">
-                            <p>No hay recorridos guardados</p>
-                            <p class="routes-list__hint">Crea uno nuevo o importa un archivo JSON</p>
+                        <div class="routes-empty">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
+                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+                                <circle cx="12" cy="10" r="3"/>
+                            </svg>
+                            <p class="routes-empty__title">No hay recorridos</p>
+                            <p class="routes-empty__hint">Toca + para crear uno nuevo</p>
                         </div>
                     `;
                     return;
                 }
 
                 container.innerHTML = routes.map((route, index) => `
-                    <article class="route-card" data-id="${route.id}">
-                        <div class="route-card__info">
-                            <h3 class="route-card__name">${route.name || `Recorrido ${index + 1}`}</h3>
-                            <div class="route-card__meta">
-                                <span class="route-card__distance">📏 ${(route.distance || 0).toFixed(2)} km</span>
-                                <span class="route-card__points">📍 ${route.points?.length || 0} puntos</span>
-                                <span class="route-card__date">📅 ${formatDate(route.createdAt)}</span>
+                    <article class="route-item" data-id="${route.id}">
+                        <a href="./route-detail.html?id=${route.id}" class="route-item__link">
+                            <div class="route-item__header">
+                                <h3 class="route-item__name">${route.name || `Recorrido ${index + 1}`}</h3>
+                                <span class="route-item__date">${formatDate(route.createdAt)}</span>
                             </div>
-                        </div>
-                        <div class="route-card__actions">
-                            <a href="./track.html?id=${route.id}" class="btn btn--small btn--primary">Ver</a>
-                            <button class="btn btn--small btn--secondary" onclick="exportRoute('${route.id}')">Exportar</button>
-                            <button class="btn btn--small btn--danger" onclick="deleteRoute('${route.id}')">Eliminar</button>
+                            <div class="route-item__stats">
+                                <div class="route-item__stat">
+                                    <span class="route-item__stat-value">${(route.distance || 0).toFixed(2)}</span>
+                                    <span class="route-item__stat-unit">km</span>
+                                </div>
+                                <div class="route-item__stat">
+                                    <span class="route-item__stat-value">${route.points?.length || 0}</span>
+                                    <span class="route-item__stat-unit">pts</span>
+                                </div>
+                            </div>
+                        </a>
+                        <div class="route-item__actions">
+                            <button class="route-item__btn" onclick="exportRoute('${route.id}')" title="Exportar">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                    <polyline points="17,8 12,3 7,8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                            </button>
+                            <button class="route-item__btn route-item__btn--danger" onclick="deleteRoute('${route.id}')" title="Eliminar">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3,6 5,6 21,6"/>
+                                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                </svg>
+                            </button>
                         </div>
                     </article>
                 `).join('');
