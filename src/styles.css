@@ -1282,6 +1282,11 @@ body {
   transition: transform var(--transition-slow);
 }
 
+/* When dropdown is open, raise bottom panel above FAB container */
+.bottom-panel:has(.dropdown.is-open) {
+  z-index: 250;
+}
+
 .bottom-panel__handle {
   width: 40px;
   height: 4px;
@@ -1567,6 +1572,13 @@ body {
   }
 }
 
+/* Medium screens - ensure fab doesn't overlap status indicator */
+@media (min-width: 451px) and (max-width: 767px) {
+  .fab-container {
+    bottom: 260px;
+  }
+}
+
 @media (min-width: 768px) {
   .bottom-panel {
     left: 50%;
@@ -1577,6 +1589,13 @@ body {
     margin-bottom: var(--spacing-md);
   }
   
+  .fab-container {
+    bottom: 300px;
+  }
+}
+
+/* Larger screens - more space above panel */
+@media (min-width: 900px) {
   .fab-container {
     bottom: 280px;
   }
