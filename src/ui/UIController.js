@@ -237,7 +237,9 @@ export class UIController {
 		startBtn?.addEventListener("click", () => this.startTracking());
 		pauseBtn?.addEventListener("click", () => this.pauseTracking());
 		resumeBtn?.addEventListener("click", () => this.resumeTracking());
-		this.#elements.finishBtn?.addEventListener("click", () => this.stopTracking());
+		this.#elements.finishBtn?.addEventListener("click", () =>
+			this.stopTracking(),
+		);
 		saveBtn?.addEventListener("click", () => this.saveRoute());
 		locationBtn?.addEventListener("click", () => this.goToMyLocation());
 
@@ -734,7 +736,8 @@ export class UIController {
 	 * @param {boolean} isPaused - Si está pausado
 	 */
 	#updatePauseButton(isPaused) {
-		const { startBtn, trackingActions, pauseBtn, resumeBtn, waypointBtn } = this.#elements;
+		const { startBtn, trackingActions, pauseBtn, resumeBtn, waypointBtn } =
+			this.#elements;
 
 		// While tracking:
 		// - trackingActions always visible
@@ -742,7 +745,7 @@ export class UIController {
 		// - finishBtn always visible
 		if (startBtn) startBtn.classList.add("fab--hidden");
 		if (trackingActions) trackingActions.style.display = "flex";
-		
+
 		// Toggle pause/resume using CSS classes for reliable hiding
 		// Also toggle disabled state
 		if (pauseBtn) {
@@ -753,7 +756,7 @@ export class UIController {
 			resumeBtn.classList.toggle("fab--hidden", !isPaused);
 			resumeBtn.disabled = !isPaused;
 		}
-		
+
 		// Keep waypoint button visible while tracking (paused or active)
 		if (waypointBtn) waypointBtn.style.display = "flex";
 	}
@@ -876,7 +879,8 @@ export class UIController {
 
 		// Mostrar/ocultar FAB buttons usando clases CSS
 		if (startBtn) startBtn.classList.toggle("fab--hidden", isTracking);
-		if (trackingActions) trackingActions.style.display = isTracking ? "flex" : "none";
+		if (trackingActions)
+			trackingActions.style.display = isTracking ? "flex" : "none";
 		// Within trackingActions: pauseBtn visible when tracking starts (not paused yet)
 		if (pauseBtn) pauseBtn.classList.toggle("fab--hidden", !isTracking);
 		if (resumeBtn) resumeBtn.classList.add("fab--hidden");

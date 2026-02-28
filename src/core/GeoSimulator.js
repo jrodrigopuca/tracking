@@ -239,8 +239,7 @@ export class GeoSimulator {
 		this.#direction += (Math.random() - 0.5) * 2 * directionVariance;
 
 		// Calcular desplazamiento con velocidad actual
-		const distanceMeters =
-			this.#currentSpeed * (this.#config.interval / 1000);
+		const distanceMeters = this.#currentSpeed * (this.#config.interval / 1000);
 
 		// Convertir a grados (aproximación: 1 grado ≈ 111,320 metros)
 		const latChange = (distanceMeters * Math.cos(this.#direction)) / 111320;
@@ -263,7 +262,8 @@ export class GeoSimulator {
 	#selectNewPace() {
 		// Elegir siguiente modo basado en transiciones naturales
 		const transitions = PACE_TRANSITIONS[this.#currentPace];
-		const nextPace = transitions[Math.floor(Math.random() * transitions.length)];
+		const nextPace =
+			transitions[Math.floor(Math.random() * transitions.length)];
 		const mode = PACE_MODES[nextPace];
 
 		// Calcular velocidad aleatoria dentro del rango del modo
@@ -272,8 +272,7 @@ export class GeoSimulator {
 
 		// Calcular duración en ticks (segundos / intervalo)
 		const durationSeconds =
-			mode.minDuration +
-			Math.random() * (mode.maxDuration - mode.minDuration);
+			mode.minDuration + Math.random() * (mode.maxDuration - mode.minDuration);
 		this.#paceTimeRemaining = Math.round(
 			durationSeconds / (this.#config.interval / 1000),
 		);
