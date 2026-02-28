@@ -47,6 +47,54 @@
             </button>
         </header>
 
+        <!-- Connection Status Indicators -->
+        <div class="connection-status" id="connection-status">
+            <!-- Network indicator -->
+            <div class="connection-indicator" id="network-indicator" title="Conexión a internet">
+                <svg class="connection-indicator__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12.55a11 11 0 0114 0"/>
+                    <path d="M1.42 9a16 16 0 0121.16 0"/>
+                    <path d="M8.53 16.11a6 6 0 016.95 0"/>
+                    <circle cx="12" cy="20" r="1" fill="currentColor"/>
+                </svg>
+                <span class="connection-indicator__label">Red</span>
+            </div>
+            <!-- GPS indicator -->
+            <div class="connection-indicator" id="gps-indicator" title="Señal GPS">
+                <svg class="connection-indicator__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+                </svg>
+                <span class="connection-indicator__label">GPS</span>
+            </div>
+        </div>
+
+        <!-- Compass Widget -->
+        <div class="compass" id="compass">
+            <div class="compass__ring">
+                <!-- Cardinal directions -->
+                <span class="compass__direction compass__direction--n">N</span>
+                <span class="compass__direction compass__direction--e">E</span>
+                <span class="compass__direction compass__direction--s">S</span>
+                <span class="compass__direction compass__direction--w">O</span>
+                <!-- Compass needle (points to north) -->
+                <div class="compass__needle" id="compass-needle">
+                    <div class="compass__needle-north"></div>
+                    <div class="compass__needle-south"></div>
+                </div>
+                <!-- Movement direction indicator -->
+                <div class="compass__heading" id="compass-heading" style="display: none;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l-5 9h10l-5-9z"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="compass__info">
+                <span class="compass__degrees" id="compass-degrees">--°</span>
+                <span class="compass__label" id="compass-label">--</span>
+            </div>
+        </div>
+
         <!-- Floating Action Button (FAB) -->
         <div class="fab-container">
             <!-- Estado: Inicial -->
@@ -198,6 +246,41 @@
                 <div class="modal__actions">
                     <button type="button" id="btn-waypoint-cancel" class="modal__btn modal__btn--cancel">Cancelar</button>
                     <button type="button" id="btn-waypoint-save" class="modal__btn modal__btn--save">Guardar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exit Confirmation Modal -->
+        <div class="modal" id="exit-modal" style="display: none;">
+            <div class="modal__backdrop"></div>
+            <div class="modal__content modal__content--wide">
+                <div class="modal__icon modal__icon--warning">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </div>
+                <h3 class="modal__title">Recorrido en progreso</h3>
+                <p class="modal__description">Tienes un recorrido activo. ¿Qué deseas hacer?</p>
+                <div class="modal__actions modal__actions--vertical">
+                    <button type="button" id="btn-exit-pause" class="modal__btn modal__btn--primary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+                            <polyline points="17,21 17,13 7,13 7,21"/>
+                        </svg>
+                        Guardar y volver después
+                    </button>
+                    <button type="button" id="btn-exit-discard" class="modal__btn modal__btn--danger">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3,6 5,6 21,6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                        Descartar recorrido
+                    </button>
+                    <button type="button" id="btn-exit-cancel" class="modal__btn modal__btn--cancel">
+                        Continuar grabando
+                    </button>
                 </div>
             </div>
         </div>

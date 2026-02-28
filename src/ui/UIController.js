@@ -94,6 +94,15 @@ export class UIController {
 	/** @type {number} Tiempo acumulado antes de pausar (ms) */
 	#pausedTimeAccumulated = 0;
 
+	/** @type {number|null} Device orientation heading (degrees from north) */
+	#deviceHeading = null;
+
+	/** @type {number|null} Movement heading calculated from GPS */
+	#movementHeading = null;
+
+	/** @type {boolean} If device orientation is supported */
+	#compassSupported = false;
+
 	/**
 	 * Crea una instancia de UIController.
 	 *
@@ -122,6 +131,9 @@ export class UIController {
 		this.#bindEvents();
 		this.#subscribeToEvents();
 		this.#updateUI();
+		this.#initConnectivityMonitoring();
+		this.#initCompass();
+		this.#checkForPendingRoute();
 		this.#checkSimulationMode();
 
 		Notifications.info("Aplicación lista");
@@ -214,6 +226,20 @@ export class UIController {
 			waypointNameInput: document.getElementById("waypoint-name"),
 			waypointSaveBtn: document.getElementById("btn-waypoint-save"),
 			waypointCancelBtn: document.getElementById("btn-waypoint-cancel"),
+			// Connection indicators
+			networkIndicator: document.getElementById("network-indicator"),
+			gpsIndicator: document.getElementById("gps-indicator"),
+			// Exit modal
+			exitModal: document.getElementById("exit-modal"),
+			exitSaveBtn: document.getElementById("btn-exit-save"),
+			exitDiscardBtn: document.getElementById("btn-exit-discard"),
+			exitCancelBtn: document.getElementById("btn-exit-cancel"),
+			// Compass elements
+			compass: document.getElementById("compass"),
+			compassNeedle: document.getElementById("compass-needle"),
+			compassHeading: document.getElementById("compass-heading"),
+			compassDegrees: document.getElementById("compass-degrees"),
+			compassLabel: document.getElementById("compass-label"),
 		};
 	}
 
@@ -296,6 +322,26 @@ export class UIController {
 
 		// Detect Web Share support
 		this.#initWebShareSupport();
+
+		// Exit modal handling
+		this.#elements.exitSaveBtn?.addEventListener("click", () =>
+			this.#handleExitSave(),
+		);
+		this.#elements.exitDiscardBtn?.addEventListener("click", () =>
+			this.#handleExitDiscard(),
+		);
+		this.#elements.exitCancelBtn?.addEventListener("click", () =>
+			this.#hideExitModal(),
+		);
+		this.#elements.exitModal
+			?.querySelector(".modal__backdrop")
+			?.addEventListener("click", () => this.#hideExitModal());
+
+		// Visibility change detection (for exit warning)
+		document.addEventListener("visibilitychange", () =>
+			this.#onVisibilityChange(),
+		);
+		window.addEventListener("beforeunload", (e) => this.#onBeforeUnload(e));
 	}
 
 	/**
@@ -407,6 +453,8 @@ export class UIController {
 		const saved = this.#storageService.save(this.#currentRoute.toJSON());
 
 		if (saved) {
+			// Clear pending route from localStorage
+			this.#clearPendingRoute();
 			Notifications.success(`Recorrido "${this.#currentRoute.name}" guardado`);
 		} else {
 			Notifications.error("Error al guardar el recorrido");
@@ -545,10 +593,16 @@ export class UIController {
 	#onLocationUpdate(pos) {
 		if (!this.#currentRoute) return;
 
+		// Update GPS indicator based on accuracy
+		this.#updateGpsIndicator(pos.accuracy);
+
 		const isFirstPoint = this.#currentRoute.getPointCount() === 0;
 
 		// Agregar punto
 		this.#currentRoute.addPoint(pos.lat, pos.lng);
+
+		// Update movement heading for compass
+		this.#updateMovementHeading();
 
 		// Marker de inicio (solo primer punto) - Verde
 		if (isFirstPoint) {
@@ -586,6 +640,8 @@ export class UIController {
 	#onLocationError(err) {
 		Notifications.error(err.message);
 		this.#setStatus("Error de GPS", "stopped");
+		// Update GPS indicator to show error
+		this.#updateGpsIndicator(999); // Very high value to show offline
 	}
 
 	/**
@@ -632,6 +688,9 @@ export class UIController {
 
 		// Detener timer
 		this.#stopTimer();
+
+		// Reset GPS indicator to searching state
+		this.#updateGpsIndicator(null);
 
 		// Liberar Wake Lock
 		if (this.#wakeLockService) {
@@ -921,6 +980,109 @@ export class UIController {
 	}
 
 	/**
+	 * Inicializa el monitoreo de conectividad (Red y GPS).
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#initConnectivityMonitoring() {
+		// Monitor network connectivity
+		this.#updateNetworkIndicator(navigator.onLine);
+
+		window.addEventListener("online", () => {
+			this.#updateNetworkIndicator(true);
+		});
+
+		window.addEventListener("offline", () => {
+			this.#updateNetworkIndicator(false);
+		});
+
+		// Initial GPS state (searching until first fix)
+		this.#updateGpsIndicator(null);
+	}
+
+	/**
+	 * Actualiza el indicador de red.
+	 *
+	 * @private
+	 * @param {boolean} isOnline - Si hay conexión a internet
+	 * @returns {void}
+	 */
+	#updateNetworkIndicator(isOnline) {
+		const { networkIndicator } = this.#elements;
+		if (!networkIndicator) return;
+
+		networkIndicator.classList.remove(
+			"connection-indicator--online",
+			"connection-indicator--offline",
+			"connection-indicator--searching",
+		);
+
+		if (isOnline) {
+			networkIndicator.classList.add("connection-indicator--online");
+			networkIndicator.title = "Conectado a internet";
+		} else {
+			networkIndicator.classList.add("connection-indicator--offline");
+			networkIndicator.title = "Sin conexión a internet";
+		}
+	}
+
+	/**
+	 * Actualiza el indicador de GPS basado en la precisión.
+	 *
+	 * @private
+	 * @param {number|null} accuracy - Precisión en metros (null = buscando)
+	 * @returns {void}
+	 */
+	#updateGpsIndicator(accuracy) {
+		const { gpsIndicator } = this.#elements;
+		if (!gpsIndicator) return;
+
+		gpsIndicator.classList.remove(
+			"connection-indicator--online",
+			"connection-indicator--offline",
+			"connection-indicator--searching",
+		);
+
+		// Get or create accuracy element
+		let accuracyEl = gpsIndicator.querySelector(
+			".connection-indicator__accuracy",
+		);
+		if (!accuracyEl) {
+			accuracyEl = document.createElement("span");
+			accuracyEl.className = "connection-indicator__accuracy";
+			gpsIndicator.appendChild(accuracyEl);
+		}
+
+		if (accuracy === null) {
+			// Searching for GPS
+			gpsIndicator.classList.add("connection-indicator--searching");
+			gpsIndicator.title = "Buscando señal GPS...";
+			accuracyEl.textContent = "";
+		} else if (accuracy <= 10) {
+			// Excellent signal (< 10m accuracy)
+			gpsIndicator.classList.add("connection-indicator--online");
+			gpsIndicator.title = `GPS: Señal excelente (±${Math.round(accuracy)}m)`;
+			accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+		} else if (accuracy <= 30) {
+			// Good signal (10-30m)
+			gpsIndicator.classList.add("connection-indicator--online");
+			gpsIndicator.title = `GPS: Señal buena (±${Math.round(accuracy)}m)`;
+			accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+		} else if (accuracy <= 100) {
+			// Weak signal (30-100m)
+			gpsIndicator.classList.add("connection-indicator--searching");
+			gpsIndicator.title = `GPS: Señal débil (±${Math.round(accuracy)}m)`;
+			accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+		} else {
+			// Very weak/no signal (>100m)
+			gpsIndicator.classList.add("connection-indicator--offline");
+			gpsIndicator.title = `GPS: Señal muy débil (±${Math.round(accuracy)}m)`;
+			accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+		}
+	}
+
+	/**
 	 * Actualiza toda la UI al estado inicial.
 	 *
 	 * @private
@@ -1148,6 +1310,502 @@ export class UIController {
 		} else {
 			this.#setButtonsState(false);
 		}
+	}
+
+	// ========================================
+	// EXIT/RESUME MODAL METHODS
+	// ========================================
+
+	/**
+	 * Muestra el modal de salida.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#showExitModal() {
+		const { exitModal } = this.#elements;
+		if (exitModal) {
+			exitModal.style.display = "flex";
+		}
+	}
+
+	/**
+	 * Oculta el modal de salida.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#hideExitModal() {
+		const { exitModal } = this.#elements;
+		if (exitModal) {
+			exitModal.style.display = "none";
+		}
+	}
+
+	/**
+	 * Maneja el evento de guardar y salir.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#handleExitSave() {
+		this.#savePendingRoute();
+		this.#hideExitModal();
+		Notifications.success("Recorrido guardado. Puedes retomarlo más tarde.");
+	}
+
+	/**
+	 * Maneja el evento de descartar al salir.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#handleExitDiscard() {
+		this.#clearPendingRoute();
+		this.#hideExitModal();
+		this.stopTracking();
+		Notifications.info("Recorrido descartado");
+	}
+
+	/**
+	 * Detecta cambios de visibilidad de la página.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#onVisibilityChange() {
+		if (document.visibilityState === "hidden" && this.#isTrackingActive) {
+			// Auto-save when page loses visibility during tracking
+			this.#savePendingRoute();
+		}
+	}
+
+	/**
+	 * Maneja el evento beforeunload.
+	 *
+	 * @private
+	 * @param {BeforeUnloadEvent} e - Evento
+	 * @returns {string|undefined}
+	 */
+	#onBeforeUnload(e) {
+		if (this.#isTrackingActive) {
+			// Auto-save before leaving
+			this.#savePendingRoute();
+			// Show browser's native confirmation
+			e.preventDefault();
+			e.returnValue = "Tienes un recorrido en progreso";
+			return e.returnValue;
+		}
+	}
+
+	/**
+	 * Guarda la ruta actual como pendiente en localStorage.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#savePendingRoute() {
+		if (!this.#currentRoute) return;
+
+		// Calculate elapsed time in milliseconds
+		let elapsedMs = this.#pausedTimeAccumulated;
+		if (!this.#isPaused && this.#trackingStartTime > 0) {
+			elapsedMs += Date.now() - this.#trackingStartTime;
+		}
+
+		const pendingData = {
+			name: this.#currentRoute.name,
+			points: this.#currentRoute.points,
+			waypoints: this.#currentRoute.waypoints,
+			startTime: this.#currentRoute.startTime,
+			elapsedTime: elapsedMs,
+			savedAt: Date.now(),
+		};
+
+		try {
+			localStorage.setItem(
+				"tracking_pending_route",
+				JSON.stringify(pendingData),
+			);
+		} catch (err) {
+			console.error("Error saving pending route:", err);
+		}
+	}
+
+	/**
+	 * Carga la ruta pendiente desde localStorage.
+	 *
+	 * @private
+	 * @returns {Object|null} Datos de la ruta pendiente o null
+	 */
+	#loadPendingRoute() {
+		try {
+			const data = localStorage.getItem("tracking_pending_route");
+			return data ? JSON.parse(data) : null;
+		} catch (err) {
+			console.error("Error loading pending route:", err);
+			return null;
+		}
+	}
+
+	/**
+	 * Elimina la ruta pendiente de localStorage.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#clearPendingRoute() {
+		try {
+			localStorage.removeItem("tracking_pending_route");
+		} catch (err) {
+			console.error("Error clearing pending route:", err);
+		}
+	}
+
+	/**
+	 * Restaura el estado desde una ruta pendiente.
+	 *
+	 * @private
+	 * @param {Object} pendingData - Datos de la ruta pendiente
+	 * @returns {void}
+	 */
+	#restoreFromPendingRoute(pendingData) {
+		// Clear map
+		this.#mapService.clear();
+		this.#startMarker = null;
+		this.#currentMarker = null;
+
+		// Restore route
+		this.#currentRoute = new Route(pendingData.name);
+		this.#currentRoute.startTime = pendingData.startTime;
+
+		// Restore points
+		if (pendingData.points?.length > 0) {
+			for (const point of pendingData.points) {
+				this.#currentRoute.addPoint(point.lat, point.lng);
+			}
+
+			// Draw polyline
+			this.#mapService.updatePolyline(this.#currentRoute.points);
+
+			// Add start marker
+			const firstPoint = this.#currentRoute.points[0];
+			this.#startMarker = this.#mapService.addStartMarker(firstPoint, "Inicio");
+
+			// Add current position marker
+			const lastPoint =
+				this.#currentRoute.points[this.#currentRoute.points.length - 1];
+			this.#currentMarker = this.#mapService.addCurrentMarker(lastPoint);
+
+			// Center on last point
+			this.#mapService.centerOn(lastPoint, 19);
+		}
+
+		// Restore waypoints
+		if (pendingData.waypoints?.length > 0) {
+			for (const wp of pendingData.waypoints) {
+				const waypoint = this.#currentRoute.addWaypoint(
+					wp.lat,
+					wp.lng,
+					wp.name,
+				);
+				this.#addWaypointMarker(waypoint);
+			}
+		}
+
+		// Restore elapsed time - set accumulated time and reset start time
+		this.#pausedTimeAccumulated = pendingData.elapsedTime || 0;
+		this.#trackingStartTime = Date.now();
+
+		// Update UI
+		if (this.#elements.routeNameInput) {
+			this.#elements.routeNameInput.value = pendingData.name;
+		}
+		this.#updateStats();
+
+		// Start tracking again
+		this.#isTrackingActive = true;
+		this.#isPaused = false;
+		this.#setButtonsState(true);
+		this.#setStatus("Reanudando...");
+		this.#startTimer();
+
+		// Start geolocation
+		this.#geoService?.startWatching(
+			(pos) => {}, // Eventos manejados por EventBus
+			(err) => {},
+		);
+		this.#wakeLockService?.request();
+
+		EventBus.emit("tracking:started");
+		Notifications.success("Recorrido reanudado");
+	}
+
+	/**
+	 * Verifica si se debe reanudar una ruta pendiente (vía parámetro URL).
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#checkForPendingRoute() {
+		const urlParams = new URLSearchParams(window.location.search);
+		const shouldResume = urlParams.get("resume") === "true";
+
+		if (!shouldResume) return;
+
+		const pendingData = this.#loadPendingRoute();
+
+		if (pendingData && pendingData.points?.length > 0) {
+			// Check if it's not too old (24 hours max)
+			const maxAge = 24 * 60 * 60 * 1000;
+			const age = Date.now() - pendingData.savedAt;
+
+			if (age < maxAge) {
+				// Restore directly without modal
+				this.#restoreFromPendingRoute(pendingData);
+				this.#clearPendingRoute();
+				// Clean URL parameter
+				window.history.replaceState({}, "", window.location.pathname);
+			} else {
+				// Too old, clean up
+				this.#clearPendingRoute();
+			}
+		}
+	}
+
+	// ========================================
+	// COMPASS METHODS
+	// ========================================
+
+	/**
+	 * Inicializa la brújula.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#initCompass() {
+		// Check for device orientation support
+		if ("DeviceOrientationEvent" in window) {
+			// iOS 13+ requires permission
+			if (typeof DeviceOrientationEvent.requestPermission === "function") {
+				// Will request on first interaction
+				this.#elements.compass?.addEventListener(
+					"click",
+					() => this.#requestCompassPermission(),
+					{ once: true },
+				);
+				this.#elements.compass?.classList.add("compass--calibrating");
+			} else {
+				// Android and other browsers
+				this.#startCompassListener();
+			}
+		} else {
+			this.#elements.compass?.classList.add("compass--unavailable");
+			if (this.#elements.compassLabel) {
+				this.#elements.compassLabel.textContent = "No disponible";
+			}
+		}
+	}
+
+	/**
+	 * Solicita permiso para la brújula en iOS.
+	 *
+	 * @private
+	 * @returns {Promise<void>}
+	 */
+	async #requestCompassPermission() {
+		try {
+			const permission = await DeviceOrientationEvent.requestPermission();
+			if (permission === "granted") {
+				this.#startCompassListener();
+				this.#elements.compass?.classList.remove("compass--calibrating");
+			} else {
+				this.#elements.compass?.classList.add("compass--unavailable");
+				Notifications.warning("Permiso de brújula denegado");
+			}
+		} catch (err) {
+			console.error("Error requesting compass permission:", err);
+			this.#elements.compass?.classList.add("compass--unavailable");
+		}
+	}
+
+	/**
+	 * Inicia el listener de orientación del dispositivo.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#startCompassListener() {
+		this.#compassSupported = true;
+		this.#elements.compass?.classList.remove("compass--calibrating");
+
+		window.addEventListener(
+			"deviceorientationabsolute",
+			(e) => this.#onDeviceOrientation(e),
+			true,
+		);
+
+		// Fallback to regular deviceorientation
+		window.addEventListener(
+			"deviceorientation",
+			(e) => this.#onDeviceOrientation(e),
+			true,
+		);
+	}
+
+	/**
+	 * Maneja el evento de orientación del dispositivo.
+	 *
+	 * @private
+	 * @param {DeviceOrientationEvent} event - Evento de orientación
+	 * @returns {void}
+	 */
+	#onDeviceOrientation(event) {
+		let heading = null;
+
+		// webkitCompassHeading is iOS specific and already compensated
+		if (event.webkitCompassHeading !== undefined) {
+			heading = event.webkitCompassHeading;
+		} else if (event.alpha !== null) {
+			// For Android, alpha is the compass direction
+			// alpha: 0 = North, 90 = East, 180 = South, 270 = West
+			heading = event.absolute ? 360 - event.alpha : event.alpha;
+		}
+
+		if (heading !== null) {
+			this.#deviceHeading = heading;
+			this.#updateCompassUI();
+		}
+	}
+
+	/**
+	 * Calcula el bearing entre dos puntos GPS.
+	 *
+	 * @private
+	 * @param {Object} from - Punto de origen {lat, lng}
+	 * @param {Object} to - Punto de destino {lat, lng}
+	 * @returns {number} Bearing en grados (0-360)
+	 */
+	#calculateBearing(from, to) {
+		const lat1 = (from.lat * Math.PI) / 180;
+		const lat2 = (to.lat * Math.PI) / 180;
+		const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+
+		const y = Math.sin(dLng) * Math.cos(lat2);
+		const x =
+			Math.cos(lat1) * Math.sin(lat2) -
+			Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+
+		let bearing = (Math.atan2(y, x) * 180) / Math.PI;
+		return (bearing + 360) % 360;
+	}
+
+	/**
+	 * Actualiza el heading de movimiento basado en los últimos puntos GPS.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#updateMovementHeading() {
+		if (!this.#currentRoute || this.#currentRoute.points.length < 2) {
+			this.#movementHeading = null;
+			return;
+		}
+
+		const points = this.#currentRoute.points;
+		const from = points[points.length - 2];
+		const to = points[points.length - 1];
+
+		// Only update if there's significant movement (> 2 meters)
+		const distance = this.#calculateDistance(from, to);
+		if (distance > 0.002) {
+			// 2 meters in km
+			this.#movementHeading = this.#calculateBearing(from, to);
+		}
+
+		this.#updateCompassUI();
+	}
+
+	/**
+	 * Calcula distancia entre dos puntos (simplificado).
+	 *
+	 * @private
+	 * @param {Object} from - Punto de origen
+	 * @param {Object} to - Punto de destino
+	 * @returns {number} Distancia en km
+	 */
+	#calculateDistance(from, to) {
+		const R = 6371; // Radio de la Tierra en km
+		const dLat = ((to.lat - from.lat) * Math.PI) / 180;
+		const dLng = ((to.lng - from.lng) * Math.PI) / 180;
+		const a =
+			Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+			Math.cos((from.lat * Math.PI) / 180) *
+				Math.cos((to.lat * Math.PI) / 180) *
+				Math.sin(dLng / 2) *
+				Math.sin(dLng / 2);
+		return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+	}
+
+	/**
+	 * Actualiza la UI de la brújula.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#updateCompassUI() {
+		const { compassNeedle, compassHeading, compassDegrees, compassLabel } =
+			this.#elements;
+
+		// Update needle rotation (points to north)
+		if (compassNeedle && this.#deviceHeading !== null) {
+			compassNeedle.style.transform = `rotate(${-this.#deviceHeading}deg)`;
+		}
+
+		// Update movement direction indicator
+		if (compassHeading && this.#movementHeading !== null) {
+			compassHeading.style.display = "block";
+			// Rotate relative to device heading if available
+			const rotation =
+				this.#deviceHeading !== null
+					? this.#movementHeading - this.#deviceHeading
+					: this.#movementHeading;
+			compassHeading.style.transform = `rotate(${rotation}deg)`;
+		} else if (compassHeading) {
+			compassHeading.style.display = "none";
+		}
+
+		// Update degrees display - show movement heading when tracking
+		const displayHeading =
+			this.#isTrackingActive && this.#movementHeading !== null
+				? this.#movementHeading
+				: this.#deviceHeading;
+
+		if (compassDegrees) {
+			if (displayHeading !== null) {
+				compassDegrees.textContent = `${Math.round(displayHeading)}°`;
+			} else {
+				compassDegrees.textContent = "--°";
+			}
+		}
+
+		// Update cardinal direction label
+		if (compassLabel && displayHeading !== null) {
+			compassLabel.textContent = this.#getCardinalDirection(displayHeading);
+		}
+	}
+
+	/**
+	 * Convierte grados a dirección cardinal.
+	 *
+	 * @private
+	 * @param {number} degrees - Grados (0-360)
+	 * @returns {string} Dirección cardinal (N, NE, E, etc.)
+	 */
+	#getCardinalDirection(degrees) {
+		const directions = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+		const index = Math.round(degrees / 45) % 8;
+		return directions[index];
 	}
 }
 

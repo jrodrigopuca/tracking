@@ -37,6 +37,31 @@
                 </div>
             </section>
 
+            <!-- Pending Route Banner -->
+            <section class="pending-route" id="pending-route" style="display: none;">
+                <div class="pending-route__icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                </div>
+                <div class="pending-route__info">
+                    <h3 class="pending-route__title">Recorrido en progreso</h3>
+                    <p class="pending-route__desc">
+                        <strong id="pending-route-name">--</strong> · 
+                        <span id="pending-route-points">0</span> puntos
+                    </p>
+                </div>
+                <div class="pending-route__actions">
+                    <button type="button" id="btn-pending-continue" class="pending-route__btn pending-route__btn--primary">
+                        Continuar
+                    </button>
+                    <button type="button" id="btn-pending-discard" class="pending-route__btn pending-route__btn--danger">
+                        Descartar
+                    </button>
+                </div>
+            </section>
+
             <!-- Routes Section -->
             <section class="dash-section">
                 <div class="dash-section__header">
@@ -218,8 +243,58 @@
             EventBus.on('route:saved', renderRoutes);
             EventBus.on('route:deleted', renderRoutes);
 
+            /**
+             * Verifica si hay un recorrido pendiente
+             */
+            function checkPendingRoute() {
+                try {
+                    const data = localStorage.getItem('tracking_pending_route');
+                    if (!data) return;
+
+                    const pendingData = JSON.parse(data);
+                    if (!pendingData?.points?.length) return;
+
+                    // Check if not too old (24 hours)
+                    const maxAge = 24 * 60 * 60 * 1000;
+                    const age = Date.now() - pendingData.savedAt;
+                    if (age >= maxAge) {
+                        localStorage.removeItem('tracking_pending_route');
+                        return;
+                    }
+
+                    // Show pending route banner
+                    const banner = document.getElementById('pending-route');
+                    document.getElementById('pending-route-name').textContent = pendingData.name || 'Sin nombre';
+                    document.getElementById('pending-route-points').textContent = pendingData.points.length;
+                    banner.style.display = 'flex';
+                } catch (err) {
+                    console.error('Error checking pending route:', err);
+                }
+            }
+
+            /**
+             * Continuar recorrido pendiente
+             */
+            function continuePendingRoute() {
+                window.location.href = './track.html?resume=true';
+            }
+
+            /**
+             * Descartar recorrido pendiente
+             */
+            function discardPendingRoute() {
+                localStorage.removeItem('tracking_pending_route');
+                document.getElementById('pending-route').style.display = 'none';
+                Notifications.info('Recorrido descartado');
+            }
+
+            // Pending route event listeners
+            document.getElementById('btn-pending-continue')?.addEventListener('click', continuePendingRoute);
+            document.getElementById('btn-pending-discard')?.addEventListener('click', discardPendingRoute);
+
             // Initial render
             renderRoutes();
+            checkPendingRoute();
         </script>
     </body>
 </html>
