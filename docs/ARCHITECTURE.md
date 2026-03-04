@@ -2,515 +2,152 @@
 
 ## 📐 Visión General
 
-Tracking App es una Single Page Application (SPA) client-side que utiliza tecnologías web estándar para proporcionar funcionalidad de tracking GPS.
+Tracking App es una SPA client-side que usa Leaflet + OpenStreetMap para mostrar mapas y la Geolocation API del navegador para capturar recorridos. La aplicación está modularizada en servicios pequeños (SRP) conectados por un EventBus y orquestados por `app.js`.
 
 ## 🏛️ Arquitectura de Alto Nivel
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   NAVEGADOR                          │
-│  ┌───────────────────────────────────────────────┐  │
-│  │          interface de Usuario                 │  │
-│  │  ┌──────────────┐    ┌──────────────┐        │  │
-│  │  │ index.html   │    │ track.html   │        │  │
-│  │  │  (Dashboard) │    │  (Tracking)  │        │  │
-│  │  └──────┬───────┘    └──────┬───────┘        │  │
-│  │         │                    │                │  │
-│  │         └────────┬───────────┘                │  │
-│  │                  │                            │  │
-│  │         ┌────────▼────────┐                   │  │
-│  │         │    track.js     │                   │  │
-│  │         │  (Controller)   │                   │  │
-│  │         └────────┬────────┘                   │  │
-│  │                  │                            │  │
-│  └──────────────────┼────────────────────────────┘  │
-│                     │                               │
-│  ┌──────────────────┼────────────────────────────┐  │
-│  │                  │        APIs                │  │
-│  │    ┌─────────────┼─────────────┐              │  │
-│  │    │             │             │              │  │
-│  │  ┌─▼──────┐  ┌──▼───────┐  ┌─▼────────┐      │  │
-│  │  │Geoloc. │  │LocalStg  │  │HERE Maps │      │  │
-│  │  │  API   │  │   API    │  │   API    │      │  │
-│  │  └────────┘  └──────────┘  └──────────┘      │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                          NAVEGADOR                          │
+│  ┌───────────────────────────┬─────────────────────────────┐ │
+│  │   Páginas (UI)            │   Core Services             │ │
+│  │   - index.html            │   - MapService (Leaflet)    │ │
+│  │   - track.html            │   - GeoLocationService      │ │
+│  │   - route-detail.html     │   - GeoSimulator            │ │
+│  │                           │   - StorageService          │ │
+│  │   app.js crea UIController│   - ExportService           │ │
+│  │   e inyecta dependencias │   - WakeLockService         │ │
+│  └───────────────┬───────────┴───────────┬────────────────┘ │
+│                  │ EventBus (pub/sub)    │                   │
+│                  └──────────────┬────────┘                   │
+│                                 │                            │
+│      ┌──────────────────────────▼─────────────────────────┐  │
+│      │ APIs del navegador / terceros                     │  │
+│      │ - Geolocation     - DeviceOrientation (brújula)   │  │
+│      │ - Wake Lock       - Battery / Network info        │  │
+│      │ - Fullscreen      - Web Share                     │  │
+│      │ - Leaflet + OSM tiles (CDN)                       │  │
+│      └───────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## 📦 Módulos y Responsabilidades
 
 ### 1. Capa de Presentación
 
-#### [index.html](src/index.html) - Dashboard
-**Responsabilidad**: Gestión y visualización de recorridos guardados
+- [src/index.html](src/index.html) — Dashboard
+  - Lista y estadísticas de recorridos (`tracking_routes`)
+  - Importación JSON (valida estructura y crea `Route`)
+  - Banner para reanudar recorridos pendientes (`tracking_pending_route`)
+  - Acciones rápidas: exportar JSON, eliminar ruta
 
-**Funcionalidades**:
-- Renderizado de lista de rutas desde localStorage
-- Navegación a vista de tracking
-- Importación de archivos JSON
-- Link a vista detallada de cada ruta
+- [src/track.html](src/track.html) — Tracking en vivo
+  - Mapa Leaflet a pantalla completa
+  - Controles: iniciar/pausar/reanudar/finalizar, guardar, exportar (GPX/KML/Google/Apple), compartir (Web Share)
+  - Indicadores de red, GPS (precisión), batería, brújula y dirección de movimiento
+  - Waypoints marcables durante la grabación
+  - Modo simulación (`?simulate=true`) con rutas realistas
+  - Fullscreen y Wake Lock mientras se graba
 
-**Dependencias**:
-- [styles.css](src/styles.css)
-- LocalStorage API
-- DOM API
-
-#### [track.html](src/track.html) - Vista de Tracking
-**Responsabilidad**: Interfaz para grabación y visualización de recorridos
-
-**Funcionalidades**:
-- Contenedor del mapa HERE
-- Botones de control de tracking
-- Display de información en tiempo real
-- Lista de puntos capturados
-
-**Dependencias**:
-- HERE Maps SDK v3.1
-- [track.js](src/track.js)
-- [styles.css](src/styles.css)
+- [src/route-detail.html](src/route-detail.html) — Visor de rutas guardadas
+  - Renderiza polilínea, marcadores de inicio/fin/waypoints
+  - Reproducción animada con inversión de dirección
+  - Exportar/compartir ruta y eliminar desde la vista de detalle
+  - Overlay opcional de ubicación del usuario
 
 ### 2. Capa de Lógica
 
-#### [track.js](src/track.js) - Controlador Principal
-**Responsabilidad**: Lógica central de la aplicación
-
-**Componentes**:
-
-##### Inicialización
-```javascript
-initConditions()
-├── Crea H.service.Platform con API key
-├── Configura capas de mapa por defecto
-├── Crea instancia H.Map
-└── Habilita comportamientos de interacción
-```
-
-##### Sistema de Tracking
-```javascript
-startTracking()
-├── watchPosition() activo
-├── Captura coordenadas GPS
-├── Aplica filtros temporales (10 seg)
-├── Valida puntos únicos
-├── Actualiza path array
-├── Renderiza markers
-├── Actualiza polyline
-└── Calcula distancia
-```
-
-##### Gestión de Estado
-- **Variables globales**:
-  - `watchLocation`: ID del watcher de geolocalización
-  - `map`: Instancia del mapa HERE
-  - `platform`: Plataforma HERE Maps
-  - `path`: Array de coordenadas capturadas
-  - `distance`: Distancia acumulada en metros
-  - `polyline`: Referencia a polyline del mapa
-  - `lastAddedPointTime`: Timestamp del último punto
-
-##### Funciones Utilitarias
-
-```javascript
-// Cálculo geodésico (Haversine)
-calculateDistance(lat1, lon1, lat2, lon2)
-  └── Retorna distancia en metros
-
-// Actualización visual
-updateDistance(pos)
-  ├── Calcula distancia incremental
-  ├── Actualiza polyline en mapa
-  └── Actualiza UI con info
-
-// Persistencia
-savePath()
-  ├── Lee routes desde localStorage
-  ├── Crea objeto route con timestamp ID
-  └── Guarda en localStorage
-
-// Exportación
-exportPath()
-  ├── Serializa path a JSON
-  ├── Crea Blob descargable
-  └── Trigger download en navegador
-```
-
-#### [route.js](src/route.js) - Clase Route (NO UTILIZADO)
-**Estado**: Refactorización incompleta
-
-**Intención original**: Encapsular lógica de tracking en clase reutilizable
-
-**Contenido**:
-- Clase `Route` con métodos similares a track.js
-- Constructor con inicialización de mapa
-- Métodos parcialmente implementados
-- **Problema**: Nunca se importa ni se utiliza
-
----
+- [src/app.js](src/app.js) — Punto de entrada; compone servicios, inicializa UIController y listeners globales (foreground/background, wake lock).
+- [src/ui/UIController.js](src/ui/UIController.js) — Orquesta UI/servicios en track.html: controla botones, métricas, timers, waypoints, estado pendiente, batería, brújula y exportaciones.
+- [src/ui/Notifications.js](src/ui/Notifications.js) — Toasts no bloqueantes.
+- [src/core/MapService.js](src/core/MapService.js) — Wrapper Leaflet (markers diferenciados, polilíneas, fitBounds, zoom, limpieza).
+- [src/core/GeoLocationService.js](src/core/GeoLocationService.js) — Wrapper Geolocation (start/stop, opciones, eventos de error).
+- [src/core/GeoSimulator.js](src/core/GeoSimulator.js) — Simulador de GPS con ritmos dinámicos y ciudades predefinidas.
+- [src/core/StorageService.js](src/core/StorageService.js) — CRUD localStorage + import/export JSON + eventos.
+- [src/core/ExportService.js](src/core/ExportService.js) — GPX, KML, deep links Google/Apple Maps y Web Share.
+- [src/core/WakeLockService.js](src/core/WakeLockService.js) — Mantiene pantalla activa y detecta background/foreground.
+- [src/core/EventBus.js](src/core/EventBus.js) — Pub/Sub central.
+- [src/models/Route.js](src/models/Route.js) — Modelo de ruta: puntos, waypoints, distancia, velocidades, serialización.
 
 ### 3. Capa de Datos
 
-#### LocalStorage Schema
+- Persistencia principal: `localStorage`
+  - `tracking_routes`: `RouteData[]`
+    - `id: string`, `name: string`, `createdAt: ISO`, `points: {lat,lng,timestamp}[]`, `waypoints: {id,lat,lng,name,timestamp}[]`, `distance: km`, `duration: ms`, `averageSpeed: km/h`
+  - `tracking_pending_route`: estado temporal para reanudar (nombre, puntos, waypoints, elapsedTime, savedAt)
 
-```typescript
-// Tipo: Array<Route>
-interface Route {
-  name: string;        // "Route-{timestamp}" o "Imported-{timestamp}"
-  id: number;          // Date.now() timestamp
-  distance: number;    // metros recorridos
-  path: Position[];    // array de coordenadas
-}
+Flujo de datos resumido:
 
-interface Position {
-  lat: number;         // latitud
-  lng: number;         // longitud
-}
-```
+1. Geolocation/GeoSimulator emite posiciones → EventBus `location:updated`
+2. UIController agrega puntos a `Route`, actualiza polyline/markers/estadísticas
+3. Usuario guarda → `StorageService.save` persiste en `tracking_routes`
+4. Exportaciones generan archivos (GPX/KML/JSON) o enlaces (Google/Apple) o Web Share
+5. Rutas pendientes se auto-guardan y reanudan vía parámetro `resume=true`
 
-**Key**: `"routes"`
-**Acceso**: 
-- Lectura: `JSON.parse(localStorage.getItem("routes")) || []`
-- Escritura: `localStorage.setItem("routes", JSON.stringify(routes))`
+### 4. APIs y dependencias externas
 
-#### Flujo de Datos
-
-```
-[Captura GPS] → Geolocation API
-      ↓
-[Filtrado] → Validación temporal + unicidad
-      ↓
-[Estado Local] → path array + distance variable
-      ↓
-[Persistencia] → localStorage (on demand)
-      ↓
-[Exportación] → JSON file download
-```
-
----
-
-### 4. Capa de APIs Externas
-
-#### Geolocation API
-```javascript
-navigator.geolocation.watchPosition(
-  successCallback,  // Recibe GeolocationPosition
-  errorCallback,    // ⚠️ NO IMPLEMENTADO
-  options           // ⚠️ NO CONFIGURADO
-)
-```
-
-**Configuración actual**: Valores por defecto del navegador
-**Sugerencia**: Agregar opciones:
-```javascript
-{
-  enableHighAccuracy: true,
-  timeout: 5000,
-  maximumAge: 0
-}
-```
-
-#### HERE Maps API v3.1
-
-**Módulos utilizados**:
-- `mapsjs-core.js`: Core del mapa
-- `mapsjs-service.js`: Servicios de plataforma
-- `mapsjs-ui.js`: Elementos de UI (no utilizado actualmente)
-- `mapsjs-mapevents.js`: Manejo de eventos
-
-**Objetos principales**:
-```javascript
-H.service.Platform        // Plataforma con API key
-H.Map                     // Instancia del mapa
-H.map.Marker              // Marcadores de puntos
-H.map.Polyline            // Líneas de ruta
-H.geo.LineString          // Geometría de línea
-H.geo.Point               // Punto geográfico
-H.mapevents.Behavior      // Comportamientos (pan, zoom)
-H.mapevents.MapEvents     // Eventos del mapa
-```
-
----
+- Geolocation API con `enableHighAccuracy: true`, `maximumAge: 0`, `timeout: 10000` (ajustado en modo ahorro de batería).
+- Leaflet 1.9.4 + OpenStreetMap tiles (CDN).
+- DeviceOrientation (brújula) con fallback y permiso explícito en iOS.
+- Screen Wake Lock (opcional; se degrada en navegadores sin soporte).
+- Battery Status (cuando está disponible) para modo ahorro.
+- Web Share API (cuando está disponible) y Fullscreen API.
 
 ## 🔄 Flujos de Usuario
 
-### Flujo 1: Crear Nuevo Recorrido
+1. **Nuevo recorrido**
+   - `index.html` → botón + → `track.html`
+   - Iniciar → agrega puntos (GPS o simulador), muestra stats, marca inicio/actual, waypoints opcionales
+   - Pausar/Reanudar según sea necesario
+   - Finalizar → Guardar (localStorage) y opcionalmente exportar/compartir
 
-```
-[index.html] Usuario hace clic en "Agregar Recorrido"
-      ↓
-[track.html] Carga con mapa centrado en coordenadas default
-      ↓
-Usuario hace clic en "Iniciar"
-      ↓
-[track.js:startTracking()] Inicia watchPosition
-      ↓
-Cada 10+ segundos: Captura coordenada única
-      ↓
-[track.js:updateDistance()] Actualiza distancia y polyline
-      ↓
-[track.js:updateList()] Agrega a lista visible
-      ↓
-Usuario hace clic en "Terminar"
-      ↓
-[track.js:stopTracking()] Detiene watchPosition
-      ↓
-Usuario hace clic en "Guardar recorrido"
-      ↓
-[track.js:savePath()] Persiste en localStorage
-      ↓
-Usuario hace clic en "Volver"
-      ↓
-[index.html] Dashboard actualizado con nuevo recorrido
-```
+2. **Reanudar recorrido pendiente**
+   - `index.html` detecta `tracking_pending_route` y ofrece continuar
+   - `track.html?resume=true` restaura puntos, waypoints y tiempo acumulado, reactiva tracking
 
-### Flujo 2: Ver Recorrido Guardado
+3. **Ver recorrido guardado**
+   - `route-detail.html?id=...` carga desde `tracking_routes`
+   - Muestra polilínea, inicio/fin/waypoints, métricas, replay y exportar/compartir/eliminar
 
-```
-[index.html] Usuario hace clic en "Ver" de un recorrido
-      ↓
-[track.html?id=123456] Carga con parámetro ID
-      ↓
-[track.js:checkParamId()] Lee ID de URL params
-      ↓
-Busca route en localStorage por ID
-      ↓
-Carga path y distance del route
-      ↓
-Renderiza polyline completa en mapa
-      ↓
-Centra mapa en primer punto del path
-```
+4. **Importar recorrido**
+   - `index.html` → input file (.json)
+   - Valida estructura de puntos, crea `Route`, persiste en `tracking_routes`
 
-### Flujo 3: Importar Recorrido
+5. **Exportar/Compartir**
+   - En vivo: GPX/KML/Google/Apple/Share desde `track.html`
+   - Guardadas: exportar/compartir desde `route-detail.html` (GPX/KML/Share)
 
-```
-[index.html] Usuario selecciona archivo JSON
-      ↓
-[index.html:addNewRouteByFile()] Trigger change event
-      ↓
-FileReader lee contenido del archivo
-      ↓
-JSON.parse() del contenido
-      ↓
-Crea route object con path importado
-      ↓
-Agrega a array de routes en localStorage
-      ↓
-[index.html:loadRoutes()] Refresca lista
-```
+## 🧩 Patrones y decisiones
 
-### Flujo 4: Exportar Recorrido
+- SRP + SOLID en servicios pequeños; UIController orquesta.
+- Dependency Injection desde `app.js` (map, geo, storage, wake lock).
+- Event-driven con `EventBus` para desac acoplar GPS/UI/almacenamiento.
+- LocalStorage por simplicidad y uso offline ligero; sin backend.
+- Leaflet + OSM para evitar API keys y reducir lock-in.
 
-```
-[track.html] Usuario hace clic en "Exportar"
-      ↓
-[track.js:exportPath()] Serializa path actual
-      ↓
-Crea Blob con JSON del path
-      ↓
-Crea URL temporal del Blob
-      ↓
-Crea elemento <a> con download attribute
-      ↓
-Trigger click programático
-      ↓
-Navegador descarga "recorrido.json"
-      ↓
-Cleanup: Revoca URL del Blob
-```
+## 🚀 Escalabilidad / Limitaciones actuales
 
----
-
-## 🧩 Patrones de Diseño
-
-### Patrones Utilizados
-
-#### 1. Module Pattern (Implícito)
-Cada archivo JS actúa como módulo independiente con scope propio (gracias a ES modules).
-
-#### 2. Event-Driven Architecture
-Toda la interacción se basa en event listeners:
-```javascript
-document.getElementById("start-button").addEventListener("click", startTracking);
-```
-
-#### 3. Observer Pattern
-Uso de `watchPosition()` que notifica cambios de posición.
-
-### Anti-patrones Presentes
-
-#### 1. God Object
-`track.js` maneja demasiadas responsabilidades:
-- UI updates
-- Geolocation
-- Map rendering
-- Data persistence
-- Export/Import
-
-**Solución**: Separar en módulos especializados.
-
-#### 2. Global Variables
-Variables globales en scope del módulo:
-```javascript
-let watchLocation = null;
-let map;
-let platform;
-// ...
-```
-
-**Solución**: Encapsular en clase o usar closures.
-
-#### 3. Magic Numbers
-```javascript
-const isTimeDifferenceValid = timeDifference >= 10000; // ¿Por qué 10000?
-```
-
-**Solución**: Usar constantes nombradas:
-```javascript
-const MIN_TIME_BETWEEN_POINTS_MS = 10000; // 10 segundos
-```
-
----
-
-## 🔧 Decisiones Técnicas
-
-### ¿Por qué LocalStorage?
-- ✅ Simple de implementar
-- ✅ No requiere backend
-- ✅ Persistencia entre sesiones
-- ❌ Límite de almacenamiento (~5-10MB)
-- ❌ No compartible entre dispositivos
-- ❌ Vulnerable a limpieza del navegador
-
-**Alternativas futuras**: IndexedDB, Backend API
-
-### ¿Por qué HERE Maps?
-- ✅ API completa y documentada
-- ✅ Tier gratuito generoso
-- ✅ Buena calidad de mapas
-- ❌ Requiere API key
-- ❌ Lock-in con proveedor específico
-
-**Alternativas**: Mapbox, Leaflet + OpenStreetMap, Google Maps
-
-### ¿Por qué Vanilla JS?
-- ✅ Sin dependencias adicionales
-- ✅ Bundle size pequeño
-- ✅ Rendimiento óptimo
-- ❌ Más código boilerplate
-- ❌ Sin reactividad automática
-- ❌ Difícil de escalar
-
-**Alternativas futuras**: React, Vue, Svelte
-
-### ¿Por qué Parcel?
-- ✅ Zero-config bundler
-- ✅ Hot Module Replacement
-- ✅ Manejo automático de assets
-- ✅ Rápido para proyectos pequeños
-- ❌ Menos control que Webpack/Vite
-
----
-
-## 📊 Diagramas
-
-### Diagrama de Componentes
-
-```
-┌─────────────────────────────────────────────┐
-│              index.html                      │
-│  ┌─────────────────────────────────────┐    │
-│  │  Lista de Routes                    │    │
-│  │  ┌──────┐ ┌──────┐ ┌──────┐        │    │
-│  │  │Route1│ │Route2│ │Route3│        │    │
-│  │  └──────┘ └──────┘ └──────┘        │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │  [Agregar Recorrido]                │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │  <input type="file"> [Importar]     │    │
-│  └─────────────────────────────────────┘    │
-└─────────────────────────────────────────────┘
-                    ↓ navigate
-┌─────────────────────────────────────────────┐
-│              track.html                      │
-│  ┌─────────────────────────────────────┐    │
-│  │          Mapa HERE                  │    │
-│  │  ┌────────────────────────────┐     │    │
-│  │  │ ○──○──○──○  (Polyline)    │     │    │
-│  │  └────────────────────────────┘     │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │ [Iniciar] [Terminar] [Guardar]      │    │
-│  │ [Exportar] [Volver] [+] [-]         │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │ Distancia: 1234.56m                 │    │
-│  │ Puntos: 45                          │    │
-│  └─────────────────────────────────────┘    │
-│  ┌─────────────────────────────────────┐    │
-│  │ • Lat: 37.386, Lng: -122.083        │    │
-│  │ • Lat: 37.387, Lng: -122.084        │    │
-│  └─────────────────────────────────────┘    │
-└─────────────────────────────────────────────┘
-```
-
-### Diagrama de Secuencia: Tracking
-
-```
-Usuario    track.html    track.js       Geolocation    HERE Maps    localStorage
-  │            │            │                │              │             │
-  │   Click    │            │                │              │             │
-  │  Iniciar   │            │                │              │             │
-  │────────────>────────────>watchPosition() │              │             │
-  │            │            │────────────────>              │             │
-  │            │            │                │              │             │
-  │            │            │  [cada 10s]    │              │             │
-  │            │            │<────────────────              │             │
-  │            │            │ position       │              │             │
-  │            │            │                │              │             │
-  │            │            │  addMarker()   │              │             │
-  │            │            │────────────────────────────────>            │
-  │            │            │                │              │             │
-  │            │            │  updatePolyline()             │             │
-  │            │            │────────────────────────────────>            │
-  │            │            │                │              │             │
-  │            │<───────────│ updateUI()     │              │             │
-  │<───────────│            │                │              │             │
-  │  Display   │            │                │              │             │
-  │            │            │                │              │             │
-  │   Click    │            │                │              │             │
-  │  Guardar   │            │                │              │             │
-  │────────────>────────────> savePath()     │              │             │
-  │            │            │────────────────────────────────────────────>│
-  │            │            │                │              │  setItem()  │
-  │            │            │                │              │             │
-```
-
----
-
-## 🚀 Escalabilidad
-
-### Limitaciones Actuales
-
-1. **LocalStorage**: Máximo ~10MB
-2. **Renderizado**: Polylines con miles de puntos pueden ser lentas
-3. **Sin paginación**: Lista de routes carga todo de una vez
-4. **Sin índices**: Búsqueda O(n) en array de routes
+- LocalStorage (~5–10 MB) limita rutas largas; sin paginación ni compresión.
+- Polilíneas muy densas pueden afectar render y memoria en dispositivos modestos.
+- Sin Service Worker/PWA: requiere red para tiles y no hay cache de assets.
+- Web Share, Wake Lock, Battery y DeviceOrientation dependen del navegador (especialmente en iOS/Firefox).
 
 ### Propuestas para Escalar
 
 #### Corto Plazo
+
 - Implementar límite máximo de rutas guardadas
 - Agregar simplificación de polylines (Douglas-Peucker)
 - Lazy loading de rutas en dashboard
 
 #### Mediano Plazo
+
 - Migrar a IndexedDB
 - Implementar Web Workers para cálculos pesados
 - Virtualización de lista de rutas
 
 #### Largo Plazo
+
 - Backend con base de datos
 - Sync multi-dispositivo
 - Compresión de datos
@@ -522,23 +159,23 @@ Usuario    track.html    track.js       Geolocation    HERE Maps    localStorage
 
 ### Vulnerabilidades Actuales
 
-1. **API Key expuesta**: Visible en código del cliente
-2. **Sin sanitización**: JSON import sin validación
-3. **XSS potencial**: innerHTML sin sanitización
-4. **Sin rate limiting**: API calls sin control
+1. **Importación JSON sin esquema**: no se valida estructura/tamaño antes de guardar en localStorage
+2. **XSS potencial**: uso puntual de `innerHTML` y datos de rutas/waypoints sin sanitizar
+3. **Recursos de terceros por CDN**: Leaflet/OSM sin Content Security Policy explícita
+4. **Sin controles de cuota**: no hay límites de tamaño/longitud de rutas al importar o guardar
 
 ### Mitigaciones Recomendadas
 
-1. **Proxy backend** para HERE Maps API
-2. **Validación de esquema** para JSON imports
-3. **Uso de textContent** en lugar de innerHTML
-4. **Implementar throttling** en llamadas API
+1. **Validar esquema** de rutas/waypoints previo a persistir (p.ej., AJV + límites de longitud)
+2. **Escapar/sanitizar** textos de usuario y sustituir `innerHTML` por `textContent`
+3. **Definir CSP** y listar solo CDNs necesarios; considerar empaquetar assets críticos
+4. **Aplicar límites** de puntos/waypoints y tamaño de archivos de importación
 
 ---
 
 ## 📚 Referencias
 
-- [HERE Maps JavaScript API](https://developer.here.com/documentation/maps/3.1.48.0/dev_guide/index.html)
+- [Leaflet Documentation](https://leafletjs.com/reference.html)
 - [Geolocation API MDN](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API)
 - [LocalStorage MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
 - [Parcel Documentation](https://parceljs.org/)

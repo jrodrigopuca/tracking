@@ -7,64 +7,43 @@ Este documento detalla limitaciones conocidas y mejoras pendientes del proyecto.
 
 ---
 
-## ✅ Issues Resueltos en v2.0
+# Known Issues & Limitaciones - Tracking App v2.0
 
-La mayoría de los issues de v1.0 fueron resueltos con la migración a Leaflet:
-
-| Issue Original                      | Estado                             |
-| ----------------------------------- | ---------------------------------- |
-| `actualTracking()` no guarda puntos | ✅ Nueva arquitectura              |
-| Sin validación de API Key           | ✅ OpenStreetMap no requiere key   |
-| Sin manejo de errores Geolocation   | ✅ GeoLocationService con handlers |
-| Uso de `alert()`                    | ✅ Sistema de notificaciones toast |
-| Código duplicado                    | ✅ Servicios modulares SOLID       |
-| API Key expuesta                    | ✅ No hay API key                  |
+Documento vivo con las limitaciones conocidas de la versión actual.
 
 ---
 
 ## 🟡 Limitaciones Actuales
 
-### 1. Sin UI para eliminar rutas
+### 1) Exportación en `route-detail.html`
 
-**Descripción**: `StorageService.delete(id)` existe pero no hay botón en UI.
+- **Descripción**: Los botones GPX/KML/Compartir usan una firma antigua de `ExportService` y fallan al intentar exportar.
+- **Workaround**: Exportar el recorrido al finalizarlo desde `track.html` o descargar el JSON desde el dashboard y convertirlo externamente.
+- **Prioridad**: Alta
 
-**Workaround**: DevTools → Application → LocalStorage
+### 2) Sin soporte offline/PWA
 
-**Prioridad**: Media
+- **Descripción**: No hay Service Worker; requiere conexión para cargar tiles de OpenStreetMap y assets.
+- **Prioridad**: Media
 
----
+### 3) Límite de LocalStorage
 
-### 2. Límite de LocalStorage
+- **Descripción**: Almacenamiento ~5–10 MB; rutas muy largas pueden no guardarse.
+- **Prioridad**: Baja
 
-**Descripción**: LocalStorage tiene límite de ~5-10MB.
+### 4) Wake Lock/Web Share en navegadores no soportados
 
-**Prioridad**: Baja (poco probable llenar con rutas normales)
-
----
-
-### 3. Sin soporte offline (PWA)
-
-**Descripción**: Requiere conexión para cargar tiles del mapa.
-
-**Prioridad**: Media
-
----
-
-### 4. Wake Lock no soportado en Firefox
-
-**Descripción**: Screen Wake Lock API no disponible en Firefox.
-
-**Mitigación**: El código detecta soporte y degrada gracefully.
+- **Descripción**: Wake Lock no funciona en Firefox; Web Share solo en móviles/desktop compatibles.
+- **Mitigación**: La app muestra avisos y degrada a comportamiento estándar.
 
 ---
 
 ## 🔧 Mejoras Pendientes
 
-- [ ] UI para eliminar rutas
-- [ ] PWA + Service Worker
-- [ ] Exportación GPX
-- [ ] Filtros en historial
-- [ ] Configuración de unidades
+- [ ] Corregir exportación/compartir en `route-detail.html`
+- [ ] PWA + cache de tiles/assets
+- [ ] Filtros/búsqueda en historial
+- [ ] Configuración de unidades (km/mi)
 
 ---
 

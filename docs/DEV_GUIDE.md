@@ -1,512 +1,162 @@
+git clone https://github.com/jrodrigopuca/tracking.git
+document.getElementById('start-button').addEventListener('click', () => {
+document.addEventListener('click', (e) => {
+
 # Guía de Desarrollo - Tracking App
 
-Guía práctica para desarrolladores que quieren contribuir o trabajar en el proyecto.
+Guía práctica para montar el entorno, ejecutar y depurar la app de tracking.
 
 ---
 
 ## 🚀 Quick Start
 
-### Requisitos Previos
+### Requisitos previos
 
 ```bash
-# Node.js/Bun
-node >= 18.0.0  # o bun >= 1.0.0
-
-# HERE Maps API Key (requerida)
-# Obtener en: https://developer.here.com/
+node >= 18   # o bun >= 1.0
+# No se requiere API key (Leaflet + OpenStreetMap por CDN)
 ```
 
-### Instalación
+### Instalación y ejecución
 
 ```bash
-# Clonar repositorio
 git clone https://github.com/jrodrigopuca/tracking.git
 cd tracking
 
-# Instalar dependencias
-bun install
-# o
-npm install
+# Dependencias
+bun install   # o npm install
 
-# Configurar API Key
-# Opción 1: Variable de entorno
-export GEO_API_KEY="tu_api_key_aqui"
+# Servidor de desarrollo (Parcel)
+	return div.innerHTML;
 
-# Opción 2: Hardcodear en track.js (solo desarrollo)
-# Editar src/track.js línea 4:
-# const GEO_API_KEY = "tu_api_key_aqui";
-
-# Iniciar servidor de desarrollo
-bun start
-# o
-npm start
-
-# Abrir navegador en:
-# http://localhost:1234/index.html
+# Abrir
+# http://localhost:1234/index.html    (dashboard)
+# http://localhost:1234/track.html    (tracking)
+# http://localhost:1234/track.html?simulate=true  (modo simulación)
 ```
 
-### Compilar para Producción
+### Build de producción
 
 ```bash
-# Build
-bun run build
-# o
-npm run build
-
-# Salida en: dist/
+bun run build   # o npm run build
+# Salida en dist/
 ```
 
 ---
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del proyecto
 
 ```
-tracking/
-├── src/                      # Código fuente
-│   ├── index.html           # Dashboard principal
-│   ├── track.html           # Vista de tracking
-│   ├── track.js             # Lógica principal (ACTIVO)
-│   ├── route.js             # Clase Route (NO USADO)
-│   └── styles.css           # Estilos globales
-├── dist/                     # Build output (generado)
-├── .parcel-cache/           # Cache de Parcel (generado)
-├── node_modules/            # Dependencias (generado)
-├── package.json             # Configuración npm
-├── bun.lockb                # Bun lockfile
-├── prettierrc.json          # Config Prettier
-├── README.md                # Documentación principal
-├── ARCHITECTURE.md          # Documentación técnica
-├── KNOWN_ISSUES.md          # Bugs conocidos
-├── STATUS.md                # Estado actual
-└── DEV_GUIDE.md             # Esta guía
+src/
+├── app.js                 # Entrada y composición de servicios
+├── core/                  # Servicios core (Map, GeoLocation, Simulator, Storage, Export, WakeLock, EventBus, Distance)
+├── models/Route.js        # Modelo de ruta y métricas
+├── ui/                    # UIController + Notifications
+├── index.html             # Dashboard + import/export JSON
+├── track.html             # Tracking en vivo (control, waypoints, export)
+├── route-detail.html      # Visor con replay/export/delete
+└── styles.css             # Estilos
+docs/                      # Documentación
+src/__tests__/             # Tests Vitest (152 tests)
+package.json, bun.lockb, vitest.config.js
 ```
 
 ---
 
-## 🛠️ Stack Tecnológico
+## 🛠️ Stack tecnológico
 
-### Frontend
-- **HTML5** - Estructura
-- **CSS3** - Estilos (vanilla, sin framework)
-- **JavaScript (ES6+)** - Lógica (vanilla, sin framework)
-
-### APIs Externas
-- **HERE Maps API v3.1** - Mapas y visualización
-- **Geolocation API** - Captura GPS del navegador
-- **LocalStorage API** - Persistencia de datos
-
-### Build Tools
-- **Parcel 2** - Bundler y dev server
-- **Bun** - Runtime y package manager (alternativa a npm)
-
-### Dependencias
-```json
-{
-  "devDependencies": {
-    "parcel": "^2.12.0",
-    "path-browserify": "^1.0.1", 
-    "process": "^0.11.10"
-  }
-}
-```
+- **Leaflet 1.9.4 + OpenStreetMap** (CDN)
+- **JavaScript ES6+**, HTML, CSS (sin framework)
+- **Parcel 2.16** para dev/build
+- **Vitest + happy-dom** para unit tests
+- APIs del navegador: Geolocation, DeviceOrientation, Battery (opcional), Wake Lock, Fullscreen, Web Share, LocalStorage
 
 ---
 
-## 🔧 Comandos Útiles
+## 🔧 Comandos útiles
 
 ```bash
 # Desarrollo
-bun start                    # Servidor dev con hot reload
-bun run build                # Build para producción
+bun start            # parcel --no-cache
 
-# Linting (si se configura)
-bun run lint                 # ESLint (no configurado aún)
-bun run format               # Prettier (configurado)
+# Build
+bun run build        # limpia dist/.parcel-cache y construye
 
-# Testing (por implementar)
-bun test                     # Ejecutar tests
-bun test:watch               # Tests en modo watch
-bun test:coverage            # Coverage report
+# Tests
+bun test             # Vitest interactivo
+bun test:run         # Vitest en modo CI
+bun test:coverage    # Cobertura con @vitest/coverage-v8
 
-# Limpieza
-rm -rf dist .parcel-cache    # Limpiar cache y build
+# Limpieza manual
+rm -rf dist .parcel-cache
 ```
 
 ---
 
-## 📝 Convenciones de Código
+## 📝 Convenciones rápidas
 
-### Estilo de Código
-
-#### JavaScript
-
-```javascript
-// ✅ CORRECTO
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-	const radlat1 = (Math.PI * lat1) / 180;
-	// ... resto del código
-	return distance;
-};
-
-// Constantes en UPPER_SNAKE_CASE
-const MAX_DISTANCE = 1000;
-const MIN_TIME_BETWEEN_POINTS = 10000;
-
-// Variables y funciones en camelCase
-let currentPosition;
-const getCurrentLocation = () => { /* ... */ };
-
-// Clases en PascalCase
-class RouteManager {
-	// ...
-}
-```
-
-#### HTML
-
-```html
-<!-- ✅ CORRECTO: Usar kebab-case para IDs y clases -->
-<div id="map-container"></div>
-<button class="button button-primary">Click</button>
-
-<!-- ❌ INCORRECTO -->
-<div id="mapContainer"></div>
-<div id="map_container"></div>
-```
-
-#### CSS
-
-```css
-/* ✅ CORRECTO: Usar kebab-case */
-.list-item {
-	padding: 12px;
-}
-
-#map-container {
-	height: 300px;
-}
-
-/* ❌ INCORRECTO */
-.listItem { }
-.list_item { }
-```
-
-### Comentarios
-
-```javascript
-// ✅ CORRECTO: Comentarios descriptivos en inglés (código)
-// Calculate distance using Haversine formula
-const distance = calculateDistance(lat1, lon1, lat2, lon2);
-
-// ✅ CORRECTO: Mensajes de usuario en español
-alert('Recorrido guardado exitosamente');
-
-// ❌ INCORRECTO: Comentarios obvios
-// This is a variable
-let x = 5;
-```
-
-### Formateo
-
-Usar Prettier (ya configurado en `prettierrc.json`):
-
-```bash
-# Formatear todo el proyecto
-npx prettier --write "src/**/*.{js,html,css}"
-```
+- CamelCase para variables y funciones; PascalCase para clases.
+- Constantes en UPPER_SNAKE_CASE.
+- IDs/clases HTML en kebab-case.
+- Comentarios breves y solo cuando aporten contexto; mensajes de UI en español.
+- Usa Prettier (`prettierrc.json`) antes de commitear.
 
 ---
 
-## 🎨 Patrones de Diseño Recomendados
+## 🐛 Debugging rápido
 
-### 1. Module Pattern
-
-```javascript
-// Encapsular funcionalidad en módulos
-const MapManager = (() => {
-	let map;
-	let platform;
-	
-	const init = (apiKey) => {
-		platform = new H.service.Platform({ apikey: apiKey });
-		// ...
-	};
-	
-	const addMarker = (position) => {
-		// ...
-	};
-	
-	return {
-		init,
-		addMarker
-	};
-})();
-
-// Uso
-MapManager.init(API_KEY);
-MapManager.addMarker({ lat: 37.386, lng: -122.083 });
-```
-
-### 2. Event-Driven
-
-```javascript
-// Usar event listeners para desacoplar
-document.getElementById('start-button').addEventListener('click', () => {
-	TrackingManager.start();
-});
-
-// Mejor: Delegar eventos
-document.addEventListener('click', (e) => {
-	if (e.target.id === 'start-button') {
-		TrackingManager.start();
-	}
-});
-```
-
-### 3. Error Handling
-
-```javascript
-// ✅ CORRECTO: Siempre manejar errores
-const loadRoute = async (id) => {
-	try {
-		const routes = JSON.parse(localStorage.getItem('routes')) || [];
-		const route = routes.find(r => r.id === id);
-		
-		if (!route) {
-			throw new Error(`Route ${id} not found`);
-		}
-		
-		return route;
-	} catch (error) {
-		console.error('Error loading route:', error);
-		showNotification('Error al cargar recorrido', 'error');
-		return null;
-	}
-};
-
-// ❌ INCORRECTO: Sin manejo de errores
-const loadRoute = (id) => {
-	const routes = JSON.parse(localStorage.getItem('routes'));
-	return routes.find(r => r.id === id);
-};
-```
-
----
-
-## 🐛 Debugging
-
-### Herramientas
-
-#### Chrome DevTools
-
-```javascript
-// Breakpoints
-debugger; // Pausar ejecución aquí
-
-// Console logging
-console.log('Position:', position);
-console.table(path); // Para arrays/objetos
-console.time('tracking'); // Medir performance
-// ... código a medir
-console.timeEnd('tracking');
-
-// Network
-// Ver llamadas a HERE Maps API en tab Network
-```
-
-#### Geolocation Override
-
-Para testing sin GPS físico:
-
-```javascript
-// En Chrome DevTools > Sensors
-// Cambiar Location a custom coordinates
-// O usar extensión "Location Guard"
-```
-
-#### LocalStorage Inspection
-
-```javascript
-// Ver datos guardados
-console.log(localStorage.getItem('routes'));
-
-// Parsear y ver
-JSON.parse(localStorage.getItem('routes'));
-
-// Limpiar (cuidado!)
-localStorage.clear();
-```
-
-### Common Issues
-
-#### 1. Mapa no se muestra
-
-```javascript
-// Verificar API key
-console.log('API Key:', GEO_API_KEY);
-
-// Verificar inicialización
-console.log('Platform:', platform);
-console.log('Map:', map);
-
-// Verificar tamaño del contenedor
-const container = document.getElementById('map-container');
-console.log('Container size:', container.offsetWidth, container.offsetHeight);
-```
-
-#### 2. GPS no funciona
-
-```javascript
-// Verificar permisos
-navigator.permissions.query({ name: 'geolocation' }).then(result => {
-	console.log('Geolocation permission:', result.state);
-});
-
-// Probar posición única
-navigator.geolocation.getCurrentPosition(
-	pos => console.log('Position:', pos),
-	err => console.error('Error:', err)
-);
-```
-
-#### 3. LocalStorage lleno
-
-```javascript
-// Calcular uso
-const calculateStorageSize = () => {
-	let total = 0;
-	for (let key in localStorage) {
-		if (localStorage.hasOwnProperty(key)) {
-			total += localStorage[key].length + key.length;
-		}
-	}
-	return (total / 1024).toFixed(2) + ' KB';
-};
-
-console.log('Storage used:', calculateStorageSize());
-```
+- **Mapa no se muestra**: verifica que `#map` tenga altura > 0 y que Leaflet CSS/JS se cargaron (CDN). Llama `map.invalidateSize()` tras cambios de layout (UIController ya lo hace en `resize`).
+- **Geolocalización falla**: revisa permisos en DevTools (`navigator.permissions.query({ name: "geolocation" })`); el modo simulación funciona sin GPS real.
+- **Precisión baja**: el indicador muestra la precisión (`±Xm`). En batería baja se reduce precisión; desactiva conectando el cargador.
+- **Rutas pendientes**: se guardan en `localStorage` como `tracking_pending_route`. El banner del dashboard permite continuar o descartar.
+- **Wake Lock/Share**: no todos los navegadores lo soportan; la app degrada silenciosamente y muestra toast de advertencia.
 
 ---
 
 ## 🧪 Testing
 
-### Unit Tests (Por implementar)
+- Framework: **Vitest** con **happy-dom** (DOM simulado). Total: **152 tests** en `src/__tests__`.
+- Ejecutar:
+  - `bun test` durante el desarrollo.
+  - `bun test:run` en CI.
+  - `bun test:coverage` para reporte V8.
+
+Ejemplo (DistanceCalculator):
 
 ```javascript
-// Ejemplo con Jest
+import { describe, it, expect } from "vitest";
+import { DistanceCalculator } from "../core/DistanceCalculator.js";
 
-// tests/calculateDistance.test.js
-import { calculateDistance } from '../src/track.js';
-
-describe('calculateDistance', () => {
-	test('should calculate correct distance between two points', () => {
-		const lat1 = 37.386052;
-		const lon1 = -122.083851;
-		const lat2 = 37.386152;
-		const lon2 = -122.083951;
-		
-		const distance = calculateDistance(lat1, lon1, lat2, lon2);
-		
-		expect(distance).toBeGreaterThan(0);
-		expect(distance).toBeLessThan(20); // ~15 metros esperados
+describe("DistanceCalculator", () => {
+	it("calcula 0 km para mismas coords", () => {
+		expect(DistanceCalculator.haversine(10, 10, 10, 10)).toBe(0);
 	});
-	
-	test('should return 0 for same coordinates', () => {
-		const distance = calculateDistance(37.386, -122.083, 37.386, -122.083);
-		expect(distance).toBe(0);
-	});
-});
-```
-
-### Integration Tests (Por implementar)
-
-```javascript
-// tests/integration/tracking.test.js
-import { JSDOM } from 'jsdom';
-
-describe('Tracking Integration', () => {
-	let dom;
-	
-	beforeEach(() => {
-		dom = new JSDOM(/* index.html content */);
-		global.document = dom.window.document;
-		global.window = dom.window;
-	});
-	
-	test('should load routes from localStorage', () => {
-		localStorage.setItem('routes', JSON.stringify([
-			{ id: 1, name: 'Test Route', path: [] }
-		]));
-		
-		loadRoutes();
-		
-		const list = document.getElementById('routes-list');
-		expect(list.children.length).toBe(1);
-	});
-});
-```
-
-### E2E Tests (Por implementar)
-
-```javascript
-// tests/e2e/tracking.spec.js con Playwright
-import { test, expect } from '@playwright/test';
-
-test('should start tracking', async ({ page }) => {
-	await page.goto('http://localhost:1234/track.html');
-	
-	// Mock geolocation
-	await page.context().grantPermissions(['geolocation']);
-	await page.context().setGeolocation({ latitude: 37.386, longitude: -122.083 });
-	
-	// Click start
-	await page.click('#start-button');
-	
-	// Verify UI changes
-	await expect(page.locator('#start-button')).toBeHidden();
-	await expect(page.locator('#stop-button')).toBeVisible();
 });
 ```
 
 ---
 
-## 🔐 Seguridad
+## 🔐 Seguridad y datos
 
-### Buenas Prácticas
+- No se usan API keys (OSM). Igual evita commitear secretos.
+- Valida y sanitiza entradas al importar JSON (`StorageService.importFromJson` ya verifica lat/lng numéricos).
+- LocalStorage es legible por el usuario; no almacenar datos sensibles.
 
-#### 1. Never commit API keys
+---
 
-```bash
-# .gitignore
-.env
-.env.local
-*.key
-secrets.json
-```
+## 🤝 Contribuir
 
-```javascript
-// ✅ CORRECTO: Usar variables de entorno
-const API_KEY = process.env.GEO_API_KEY;
-
-// ❌ INCORRECTO: Hardcodear
-const API_KEY = "abc123...";
-```
-
-#### 2. Sanitize inputs
-
-```javascript
-// ✅ CORRECTO: Sanitizar
-const sanitize = (str) => {
-	const div = document.createElement('div');
-	div.textContent = str;
-	return div.innerHTML;
-};
+- Sigue mensajes de commit tipo Conventional Commits.
+- Abre PR con descripción clara y evidencia (tests o captura).
+- Antes de subir: `bun test:run` y `bun run build` para asegurar que el bundle sigue funcionando.
+  };
 
 element.innerHTML = sanitize(userInput);
 
 // Mejor aún: Usar textContent
 element.textContent = userInput;
-```
+
+````
 
 #### 3. Validate data
 
@@ -525,7 +175,7 @@ const isValidPosition = (pos) => {
 if (isValidPosition(position)) {
 	path.push(position);
 }
-```
+````
 
 ---
 
@@ -533,7 +183,7 @@ if (isValidPosition(position)) {
 
 ### Documentación Oficial
 
-- [HERE Maps JavaScript API](https://developer.here.com/documentation/maps/3.1.48.0/dev_guide/index.html)
+- [Leaflet Documentation](https://leafletjs.com/reference.html)
 - [Geolocation API - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Geolocation_API)
 - [LocalStorage - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage)
 - [Parcel Documentation](https://parceljs.org/)
@@ -546,7 +196,7 @@ if (isValidPosition(position)) {
 
 ### Herramientas
 
-- [HERE Maps Playground](https://developer.here.com/documentation/examples/maps-js/index.html)
+- [Leaflet Providers Preview](https://leaflet-extras.github.io/leaflet-providers/preview/) (tiles alternativos)
 - [GeoJSON Validator](https://geojsonlint.com/)
 - [Can I Use](https://caniuse.com/) - Compatibilidad de browsers
 
@@ -593,6 +243,7 @@ chore(deps): update parcel to 2.12.0
 ```
 
 ### Tipos de commits
+
 - `feat`: Nueva funcionalidad
 - `fix`: Bug fix
 - `docs`: Documentación
@@ -605,20 +256,24 @@ chore(deps): update parcel to 2.12.0
 
 ```markdown
 ## Descripción
+
 Descripción clara de los cambios
 
 ## Tipo de cambio
+
 - [ ] Bug fix
 - [ ] Nueva feature
 - [ ] Breaking change
 - [ ] Documentación
 
 ## Testing
+
 - [ ] Tests añadidos/actualizados
 - [ ] Tests pasan
 - [ ] Testing manual realizado
 
 ## Checklist
+
 - [ ] Código sigue el estilo del proyecto
 - [ ] Self-review realizado
 - [ ] Documentación actualizada
@@ -646,12 +301,12 @@ bun start
 bun start --no-cache
 ```
 
-### HERE Maps no carga
+### Mapas no cargan (Leaflet/OSM)
 
-1. Verificar API key válida
-2. Verificar límites de cuota en dashboard HERE
-3. Verificar network requests en DevTools
-4. Probar con API key diferente
+1. Verificar que los scripts y CSS de Leaflet carguen (DevTools → Network, sin 404)
+2. Confirmar que la página sirva por HTTPS (requerido para geolocalización precisa)
+3. Revisar bloqueos por adblock/VPN y la política de uso de tiles de OSM
+4. Probar un proveedor alternativo de tiles (ver Leaflet Providers) si el CDN está caído
 
 ### GPS no preciso
 
@@ -680,6 +335,7 @@ bun start --no-cache
 ### Bugs
 
 Reportar en GitHub Issues con:
+
 1. Descripción del problema
 2. Pasos para reproducir
 3. Comportamiento esperado vs actual

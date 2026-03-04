@@ -58,6 +58,9 @@ export class Route {
 	/** @type {WaypointData[]} Puntos de interés */
 	waypoints = [];
 
+	/** @type {number[]} Índices donde comienza un nuevo segmento tras un salto */
+	segmentBreaks = [];
+
 	/** @type {string} Fecha de creación ISO */
 	createdAt;
 
@@ -108,6 +111,17 @@ export class Route {
 		};
 		this.waypoints.push(waypoint);
 		return waypoint;
+	}
+
+	/**
+	 * Marca un índice como inicio de segmento tras un salto/desconexión.
+	 *
+	 * @param {number} index - Índice del punto donde comienza el nuevo segmento
+	 */
+	addSegmentBreak(index) {
+		if (!this.segmentBreaks.includes(index)) {
+			this.segmentBreaks.push(index);
+		}
 	}
 
 	/**
@@ -231,6 +245,7 @@ export class Route {
 			name: this.name,
 			points: this.points,
 			waypoints: this.waypoints,
+			segmentBreaks: this.segmentBreaks,
 			createdAt: this.createdAt,
 			distance: this.getDistance(),
 			duration: this.getElapsedTime(),
@@ -254,6 +269,9 @@ export class Route {
 		const route = new Route(data.name || "Sin nombre", data.id);
 		route.points = Array.isArray(data.points) ? data.points : [];
 		route.waypoints = Array.isArray(data.waypoints) ? data.waypoints : [];
+		route.segmentBreaks = Array.isArray(data.segmentBreaks)
+			? data.segmentBreaks
+			: [];
 		route.createdAt = data.createdAt || new Date().toISOString();
 		return route;
 	}

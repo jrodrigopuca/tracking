@@ -91,6 +91,74 @@ export const DistanceCalculator = {
 			return total + this.haversine(prev.lat, prev.lng, point.lat, point.lng);
 		}, 0);
 	},
+
+	/**
+	 * Calcula la distancia perpendicular de un punto a una línea (start→end).
+	 *
+	 * @param {Position} point - Punto a evaluar
+	 * @param {Position} start - Inicio de la línea
+	 * @param {Position} end - Fin de la línea
+	 * @returns {number} Distancia en kilómetros
+	 */
+	perpendicularDistance(point, start, end) {
+		if (start.lat === end.lat && start.lng === end.lng) {
+			return this.haversine(point.lat, point.lng, start.lat, start.lng);
+		}
+
+		const dx = end.lng - start.lng;
+		const dy = end.lat - start.lat;
+		const t = Math.max(
+			0,
+			Math.min(
+				1,
+				((point.lng - start.lng) * dx + (point.lat - start.lat) * dy) /
+					(dx * dx + dy * dy),
+			),
+		);
+		const proj = {
+			lat: start.lat + t * dy,
+			lng: start.lng + t * dx,
+		};
+		return this.haversine(point.lat, point.lng, proj.lat, proj.lng);
+	},
+
+	/**
+	 * Simplifica un array de puntos usando el algoritmo Douglas-Peucker.
+	 * Complejidad: O(n log n) caso promedio, O(n²) peor caso.
+	 *
+	 * @param {Position[]} points - Array de posiciones
+	 * @param {number} [toleranceKm=0.005] - Tolerancia en km (~5 m por defecto)
+	 * @returns {Position[]} Puntos simplificados
+	 */
+	simplify(points, toleranceKm = 0.005) {
+		if (!Array.isArray(points) || points.length <= 2) {
+			return points ? [...points] : [];
+		}
+
+		let maxDist = 0;
+		let maxIndex = 0;
+		const end = points.length - 1;
+
+		for (let i = 1; i < end; i++) {
+			const dist = this.perpendicularDistance(
+				points[i],
+				points[0],
+				points[end],
+			);
+			if (dist > maxDist) {
+				maxDist = dist;
+				maxIndex = i;
+			}
+		}
+
+		if (maxDist > toleranceKm) {
+			const left = this.simplify(points.slice(0, maxIndex + 1), toleranceKm);
+			const right = this.simplify(points.slice(maxIndex), toleranceKm);
+			return [...left.slice(0, -1), ...right];
+		}
+
+		return [points[0], points[end]];
+	},
 };
 
 export default DistanceCalculator;

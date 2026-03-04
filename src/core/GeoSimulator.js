@@ -112,7 +112,7 @@ export class GeoSimulator {
 	/** @type {Object} Configuración */
 	#config = {
 		/** Intervalo entre puntos en ms */
-		interval: 1000,
+		interval: 3000,
 		/** Variación aleatoria de dirección (radianes) */
 		directionVariance: 0.3,
 		/** Precisión simulada en metros */

@@ -4,7 +4,7 @@ Aplicación web para rastreo y registro de recorridos mediante GPS utilizando Le
 
 ## 📋 Descripción
 
-Tracking App es una aplicación web que permite a los usuarios grabar recorridos mediante geolocalización GPS, visualizarlos en un mapa interactivo, guardarlos en almacenamiento local y exportarlos en múltiples formatos (JSON, GPX, KML). La aplicación utiliza Leaflet con OpenStreetMap para la visualización de mapas, implementando una arquitectura SOLID con principios de diseño moderno.
+Tracking App es una aplicación web que permite a los usuarios grabar recorridos con GPS o modo simulado, visualizarlos en un mapa interactivo, guardarlos en almacenamiento local, reanudarlos más tarde y exportarlos en múltiples formatos (JSON, GPX, KML, deep links). Usa Leaflet + OpenStreetMap y una arquitectura modular (EventBus + SRP).
 
 ## 🚀 Características
 
@@ -16,6 +16,7 @@ Tracking App es una aplicación web que permite a los usuarios grabar recorridos
 - ✅ Almacenamiento persistente en LocalStorage
 - ✅ Importación de recorridos desde archivos JSON
 - ✅ Panel de gestión de recorridos guardados
+- ✅ Reanudación de recorridos pendientes (auto-guardado en background)
 
 ### Exportación Múltiple
 
@@ -32,6 +33,7 @@ Tracking App es una aplicación web que permite a los usuarios grabar recorridos
 - ✅ Velocidad actual (km/h)
 - ✅ Distancia recorrida (metros/kilómetros)
 - ✅ Número de puntos GPS capturados
+- ✅ Reproducción de rutas guardadas (playback y reversa)
 
 ### Control de Tracking
 
@@ -39,6 +41,8 @@ Tracking App es una aplicación web que permite a los usuarios grabar recorridos
 - ✅ Wake Lock para mantener pantalla activa
 - ✅ Detección automática de app en segundo plano
 - ✅ Notificaciones de estado
+- ✅ Indicadores de red, GPS (precisión) y batería
+- ✅ Brújula con orientación del dispositivo y dirección de movimiento
 
 ### Marcadores Visuales
 
@@ -82,10 +86,11 @@ tracking/
 │   ├── ui/
 │   │   ├── UIController.js          # Controlador principal de UI
 │   │   └── Notifications.js         # Sistema de notificaciones toast
-│   ├── __tests__/                   # Tests unitarios (106 tests)
+│   ├── __tests__/                   # Tests unitarios (152 tests)
 │   ├── app.js                       # Bootstrap de la aplicación
 │   ├── index.html                   # Dashboard de recorridos
 │   ├── track.html                   # Página de tracking
+│   ├── route-detail.html            # Detalle con replay/export/delete
 │   └── styles.css                   # Estilos globales
 ├── docs/                            # Documentación
 ├── package.json
@@ -130,6 +135,7 @@ bun start
 | `http://localhost:1234/track.html`               | Nuevo recorrido        |
 | `http://localhost:1234/track.html?id=ID`         | Ver recorrido guardado |
 | `http://localhost:1234/track.html?simulate=true` | Modo simulación GPS    |
+| `http://localhost:1234/route-detail.html?id=ID`  | Detalle y replay       |
 
 ## 🧪 Testing
 
@@ -138,7 +144,7 @@ bun test           # Ejecutar tests
 bun test --watch   # Watch mode
 ```
 
-**Estado actual**: 106 tests pasando ✅
+**Estado actual**: 152 tests pasando ✅
 
 ## 🎮 Controles
 

@@ -43,6 +43,9 @@ export class MapService {
 	/** @type {L.Marker[]} Markers en el mapa */
 	#markers = [];
 
+	/** @type {L.Polyline[]} Capas de segmentos (para trazos segmentados) */
+	#segmentLayers = [];
+
 	/** @type {string} ID del contenedor */
 	#containerId;
 
@@ -239,6 +242,84 @@ export class MapService {
 	}
 
 	/**
+	 * Dibuja la polyline dividida en segmentos sólidos (grabados)
+	 * y líneas punteadas (inferidos/saltos).
+	 *
+	 * @param {Position[]} points - Array de posiciones
+	 * @param {number[]} [segmentBreaks=[]] - Índices donde comienza un nuevo segmento
+	 * @returns {void}
+	 */
+	updateSegmentedPolyline(points, segmentBreaks = []) {
+		this.clearPolyline();
+		this.#clearSegmentLayers();
+
+		if (points.length < 2) return;
+
+		if (segmentBreaks.length === 0) {
+			this.updatePolyline(points);
+			return;
+		}
+
+		const breaks = [...segmentBreaks].sort((a, b) => a - b);
+		const solidStyle = { color: "#3388ff", weight: 4, opacity: 0.8 };
+		const dashedStyle = {
+			color: "#94a3b8",
+			weight: 3,
+			opacity: 0.5,
+			dashArray: "8, 12",
+		};
+
+		let start = 0;
+		const segments = [];
+		for (const brk of breaks) {
+			if (brk > start && brk <= points.length) {
+				segments.push(points.slice(start, brk));
+				start = brk;
+			}
+		}
+		if (start < points.length) {
+			segments.push(points.slice(start));
+		}
+
+		for (let i = 0; i < segments.length; i++) {
+			const seg = segments[i];
+			if (seg.length >= 2) {
+				const latLngs = seg.map((p) => [p.lat, p.lng]);
+				this.#segmentLayers.push(
+					L.polyline(latLngs, solidStyle).addTo(this.#map),
+				);
+			}
+			// Conector punteado entre segmentos consecutivos
+			if (i < segments.length - 1 && seg.length > 0) {
+				const lastPt = seg[seg.length - 1];
+				const nextPt = segments[i + 1][0];
+				if (lastPt && nextPt) {
+					this.#segmentLayers.push(
+						L.polyline(
+							[
+								[lastPt.lat, lastPt.lng],
+								[nextPt.lat, nextPt.lng],
+							],
+							dashedStyle,
+						).addTo(this.#map),
+					);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Limpia las capas de segmentos.
+	 *
+	 * @private
+	 * @returns {void}
+	 */
+	#clearSegmentLayers() {
+		this.#segmentLayers.forEach((layer) => this.#map.removeLayer(layer));
+		this.#segmentLayers = [];
+	}
+
+	/**
 	 * Centra el mapa en una posición.
 	 *
 	 * @param {Position} position - Posición para centrar
@@ -334,6 +415,7 @@ export class MapService {
 	clear() {
 		this.clearMarkers();
 		this.clearPolyline();
+		this.#clearSegmentLayers();
 	}
 
 	/**

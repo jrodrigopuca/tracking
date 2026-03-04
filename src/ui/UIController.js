@@ -94,6 +94,15 @@ export class UIController {
 	/** @type {number} Tiempo acumulado antes de pausar (ms) */
 	#pausedTimeAccumulated = 0;
 
+	/** @type {number} Intervalo de muestreo para puntos (ms) */
+	#samplingIntervalMs = 3000;
+
+	/** @type {number|null} Timestamp del último punto aceptado */
+	#lastPointTimestamp = null;
+
+	/** @type {boolean} Flag para detectar primer punto tras reanudación */
+	#justResumed = false;
+
 	/** @type {number|null} Device orientation heading (degrees from north) */
 	#deviceHeading = null;
 
@@ -102,6 +111,9 @@ export class UIController {
 
 	/** @type {boolean} If device orientation is supported */
 	#compassSupported = false;
+
+	/** @type {boolean} If absolute device orientation is available */
+	#hasAbsoluteOrientation = false;
 
 	/** @type {boolean} If battery is low (triggers power saving mode) */
 	#lowBatteryMode = false;
@@ -174,7 +186,7 @@ export class UIController {
 
 		// Crear simulador con ciudad aleatoria (pasar null)
 		this.#simulator = new GeoSimulator(null, {
-			interval: 1000,
+			interval: this.#samplingIntervalMs,
 			speed: 1.5,
 		});
 
@@ -420,7 +432,7 @@ export class UIController {
 		const startPos = center || { lat: -12.0464, lng: -77.0428 };
 
 		this.#simulator = new GeoSimulator(startPos, {
-			interval: 1000,
+			interval: this.#samplingIntervalMs,
 			speed: 1.5, // ~5.4 km/h (caminata rápida)
 		});
 
@@ -614,6 +626,15 @@ export class UIController {
 	#onLocationUpdate(pos) {
 		if (!this.#currentRoute) return;
 
+		const sampleTimestamp = pos.timestamp ?? Date.now();
+		if (
+			this.#lastPointTimestamp !== null &&
+			sampleTimestamp - this.#lastPointTimestamp < this.#samplingIntervalMs
+		) {
+			return;
+		}
+		this.#lastPointTimestamp = sampleTimestamp;
+
 		// Update GPS indicator based on accuracy
 		this.#updateGpsIndicator(pos.accuracy);
 
@@ -621,6 +642,19 @@ export class UIController {
 
 		// Agregar punto
 		this.#currentRoute.addPoint(pos.lat, pos.lng);
+
+		// Detectar salto/desconexión para marcar segmento inferido
+		const pointCount = this.#currentRoute.getPointCount();
+		if (!isFirstPoint && pointCount >= 2) {
+			const prev = this.#currentRoute.points[pointCount - 2];
+			const curr = this.#currentRoute.points[pointCount - 1];
+			const timeDelta = curr.timestamp - prev.timestamp;
+			const distKm = this.#calculateDistance(prev, curr);
+			if (this.#justResumed || timeDelta > 30000 || distKm > 0.2) {
+				this.#currentRoute.addSegmentBreak(pointCount - 1);
+			}
+			this.#justResumed = false;
+		}
 
 		// Update movement heading for compass
 		this.#updateMovementHeading();
@@ -637,8 +671,11 @@ export class UIController {
 			this.#currentMarker = this.#mapService.addCurrentMarker(pos);
 		}
 
-		// Actualizar polyline y centrar mapa
-		this.#mapService.updatePolyline(this.#currentRoute.points);
+		// Actualizar polyline (con segmentos si hay saltos) y centrar mapa
+		this.#mapService.updateSegmentedPolyline(
+			this.#currentRoute.points,
+			this.#currentRoute.segmentBreaks,
+		);
 		this.#mapService.centerOn(pos);
 
 		// Actualizar UI
@@ -672,10 +709,15 @@ export class UIController {
 	 * @returns {void}
 	 */
 	async #onTrackingStarted() {
+		// Guard: si ya estamos en tracking activo (resume tras pausa),
+		// no resetear tiempo acumulado ni estado
+		if (this.#isTrackingActive) return;
+
 		this.#isTrackingActive = true;
 		this.#isPaused = false;
 		this.#trackingStartTime = Date.now();
 		this.#pausedTimeAccumulated = 0;
+		this.#lastPointTimestamp = null;
 		this.#setButtonsState(true);
 		this.#setStatus("Rastreando...", "active");
 
@@ -784,6 +826,8 @@ export class UIController {
 		if (!this.#isTrackingActive || !this.#isPaused) return;
 
 		this.#isPaused = false;
+		this.#lastPointTimestamp = null;
+		this.#justResumed = true;
 
 		// Reiniciar timestamp desde ahora
 		this.#trackingStartTime = Date.now();
@@ -1457,8 +1501,11 @@ export class UIController {
 
 		// Mostrar en mapa
 		if (this.#currentRoute.points.length > 0) {
-			// Dibujar polyline
-			this.#mapService.updatePolyline(this.#currentRoute.points);
+			// Dibujar polyline (con segmentos si hay saltos)
+			this.#mapService.updateSegmentedPolyline(
+				this.#currentRoute.points,
+				this.#currentRoute.segmentBreaks,
+			);
 
 			// Agregar markers en inicio (verde) y fin (rojo)
 			const firstPoint = this.#currentRoute.points[0];
@@ -1611,6 +1658,7 @@ export class UIController {
 			name: this.#currentRoute.name,
 			points: this.#currentRoute.points,
 			waypoints: this.#currentRoute.waypoints,
+			segmentBreaks: this.#currentRoute.segmentBreaks,
 			startTime: this.#currentRoute.startTime,
 			elapsedTime: elapsedMs,
 			savedAt: Date.now(),
@@ -1673,14 +1721,24 @@ export class UIController {
 		this.#currentRoute = new Route(pendingData.name);
 		this.#currentRoute.startTime = pendingData.startTime;
 
+		// Restore segment breaks
+		if (pendingData.segmentBreaks?.length > 0) {
+			for (const brk of pendingData.segmentBreaks) {
+				this.#currentRoute.addSegmentBreak(brk);
+			}
+		}
+
 		// Restore points
 		if (pendingData.points?.length > 0) {
 			for (const point of pendingData.points) {
 				this.#currentRoute.addPoint(point.lat, point.lng);
 			}
 
-			// Draw polyline
-			this.#mapService.updatePolyline(this.#currentRoute.points);
+			// Draw polyline (con segmentos si hay saltos)
+			this.#mapService.updateSegmentedPolyline(
+				this.#currentRoute.points,
+				this.#currentRoute.segmentBreaks,
+			);
 
 			// Add start marker
 			const firstPoint = this.#currentRoute.points[0];
@@ -1833,16 +1891,23 @@ export class UIController {
 		this.#compassSupported = true;
 		this.#elements.compass?.classList.remove("compass--calibrating");
 
+		// Prefer absolute orientation (Android)
 		window.addEventListener(
 			"deviceorientationabsolute",
-			(e) => this.#onDeviceOrientation(e),
+			(e) => {
+				this.#hasAbsoluteOrientation = true;
+				this.#onDeviceOrientation(e);
+			},
 			true,
 		);
 
-		// Fallback to regular deviceorientation
+		// Fallback: only used if absolute not available
 		window.addEventListener(
 			"deviceorientation",
-			(e) => this.#onDeviceOrientation(e),
+			(e) => {
+				if (this.#hasAbsoluteOrientation) return;
+				this.#onDeviceOrientation(e);
+			},
 			true,
 		);
 	}
@@ -1860,16 +1925,39 @@ export class UIController {
 		// webkitCompassHeading is iOS specific and already compensated
 		if (event.webkitCompassHeading !== undefined) {
 			heading = event.webkitCompassHeading;
-		} else if (event.alpha !== null) {
-			// For Android, alpha is the compass direction
-			// alpha: 0 = North, 90 = East, 180 = South, 270 = West
-			heading = event.absolute ? 360 - event.alpha : event.alpha;
+		} else if (event.alpha !== null && event.absolute) {
+			// Absolute orientation (Android): heading = 360 - alpha
+			heading = (360 - event.alpha) % 360;
 		}
+		// Non-absolute deviceorientation without webkitCompassHeading
+		// is unreliable for compass — ignore it
 
 		if (heading !== null) {
-			this.#deviceHeading = heading;
+			this.#deviceHeading = this.#smoothHeading(heading);
 			this.#updateCompassUI();
 		}
+	}
+
+	/**
+	 * Aplica filtro low-pass para suavizar la lectura de la brújula.
+	 * Maneja correctamente el wraparound 0°/360°.
+	 *
+	 * @private
+	 * @param {number} newHeading - Nuevo heading en grados (0-360)
+	 * @returns {number} Heading suavizado
+	 */
+	#smoothHeading(newHeading) {
+		if (this.#deviceHeading === null) return newHeading;
+
+		const alpha = 0.25; // Factor de suavizado (menor = más suave)
+
+		// Manejar wraparound 0°/360°
+		let diff = newHeading - this.#deviceHeading;
+		if (diff > 180) diff -= 360;
+		if (diff < -180) diff += 360;
+
+		const smoothed = this.#deviceHeading + alpha * diff;
+		return ((smoothed % 360) + 360) % 360;
 	}
 
 	/**
