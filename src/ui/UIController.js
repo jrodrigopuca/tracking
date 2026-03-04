@@ -1306,8 +1306,12 @@ export class UIController {
 			".fullscreen-btn__icon--enter",
 		);
 		const exitIcon = fullscreenBtn.querySelector(".fullscreen-btn__icon--exit");
+		const isFullscreen = !!document.fullscreenElement;
 
-		if (document.fullscreenElement) {
+		// Toggle layout class so CSS custom properties adapt
+		document.body.classList.toggle("is-fullscreen", isFullscreen);
+
+		if (isFullscreen) {
 			// In fullscreen
 			if (enterIcon) enterIcon.style.display = "none";
 			if (exitIcon) exitIcon.style.display = "block";
@@ -1318,6 +1322,12 @@ export class UIController {
 			if (exitIcon) exitIcon.style.display = "none";
 			fullscreenBtn.title = "Pantalla completa";
 		}
+
+		// Give the browser a frame to apply the new layout, then let Leaflet
+		// recalculate its container size so tiles render correctly.
+		requestAnimationFrame(() => {
+			this.#mapService?.invalidateSize();
+		});
 	}
 
 	/**

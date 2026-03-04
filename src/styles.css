@@ -1143,6 +1143,16 @@ body {
   --accent-orange: #f59e0b;
   --accent-blue: #3b82f6;
   
+  /* Safe area insets — overridden to 0 in fullscreen */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  
+  /* Layout anchor: approximate bottom edge of the tracking header */
+  --header-end: calc(80px + var(--safe-top));
+  
+  /* FAB distance from viewport bottom (above bottom-panel) */
+  --fab-bottom: calc(250px + var(--safe-bottom));
+  
   background: var(--dark-bg);
   color: var(--dark-text);
   overflow: hidden;
@@ -1183,8 +1193,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: var(--spacing-md);
-  padding-top: calc(var(--spacing-md) + env(safe-area-inset-top, 0px));
+  padding-top: calc(var(--spacing-md) + var(--safe-top));
   background: linear-gradient(to bottom, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0) 100%);
+  transition: padding var(--transition-slow);
 }
 
 .tracking-header__back {
@@ -1273,7 +1284,7 @@ body {
    ======================================== */
 .connection-status {
   position: fixed;
-  top: 85px;
+  top: var(--header-end);
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -1286,6 +1297,7 @@ body {
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius-full);
   border: 1px solid var(--dark-border);
+  transition: top var(--transition-slow);
 }
 
 /* Fullscreen button */
@@ -1459,8 +1471,12 @@ body {
 
 /* Responsive adjustments */
 @media (max-width: 480px) {
+  .tracking-app {
+    --header-end: calc(68px + var(--safe-top));
+    --fab-bottom: calc(230px + var(--safe-bottom));
+  }
+  
   .connection-status {
-    top: 75px;
     padding: var(--spacing-xs) var(--spacing-sm);
     gap: var(--spacing-sm);
   }
@@ -1475,13 +1491,14 @@ body {
    ======================================== */
 .compass {
   position: fixed;
-  top: 75px;
+  top: var(--header-end);
   right: var(--spacing-md);
   z-index: 900;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-xs);
+  transition: top var(--transition-slow);
 }
 
 .compass__ring {
@@ -1628,7 +1645,7 @@ body {
 /* Responsive */
 @media (max-width: 480px) {
   .compass {
-    top: 120px;
+    top: calc(var(--header-end) + 40px);
   }
   
   .compass__ring {
@@ -1658,12 +1675,13 @@ body {
    ======================================== */
 .fab-container {
   position: fixed;
-  bottom: 250px;
+  bottom: var(--fab-bottom);
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;
   display: flex;
   justify-content: center;
+  transition: bottom var(--transition-slow);
 }
 
 /* Hidden utility class - truly removes from flow and prevents clicks */
@@ -1768,8 +1786,8 @@ body {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg);
-  padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom, 0px));
-  transition: transform var(--transition-slow);
+  padding-bottom: calc(var(--spacing-lg) + var(--safe-bottom));
+  transition: transform var(--transition-slow), padding var(--transition-slow);
 }
 
 /* When dropdown is open, raise bottom panel above FAB container */
@@ -1982,7 +2000,8 @@ body {
 .tracking-app .leaflet-control-zoom {
   border: none !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
-  margin-top: 80px !important;
+  margin-top: var(--header-end, 80px) !important;
+  transition: margin-top var(--transition-slow) !important;
 }
 
 .tracking-app .leaflet-control-zoom a {
@@ -2039,10 +2058,6 @@ body {
     height: 64px;
   }
   
-  .fab-container {
-    bottom: 230px;
-  }
-  
   .action-btn span {
     display: none;
   }
@@ -2053,8 +2068,8 @@ body {
 }
 
 @media (max-width: 450px) {
-  .fab-container {
-    bottom: 250px;
+  .tracking-app {
+    --fab-bottom: calc(240px + var(--safe-bottom));
   }
   
   .fab {
@@ -2063,14 +2078,11 @@ body {
   }
 }
 
-/* Medium screens - ensure fab doesn't overlap status indicator */
-@media (min-width: 451px) and (max-width: 767px) {
-  .fab-container {
-    bottom: 260px;
-  }
-}
-
 @media (min-width: 768px) {
+  .tracking-app {
+    --fab-bottom: calc(280px + var(--safe-bottom));
+  }
+  
   .bottom-panel {
     left: 50%;
     right: auto;
@@ -2079,17 +2091,26 @@ body {
     border-radius: var(--radius-lg);
     margin-bottom: var(--spacing-md);
   }
-  
-  .fab-container {
-    bottom: 300px;
-  }
 }
 
-/* Larger screens - more space above panel */
-@media (min-width: 900px) {
-  .fab-container {
-    bottom: 280px;
-  }
+/* ========================================
+   Fullscreen Mode Overrides
+   ======================================== */
+.tracking-app.is-fullscreen {
+  /* In fullscreen, device safe-area insets don't apply */
+  --safe-top: 0px;
+  --safe-bottom: 0px;
+}
+
+/* Hide connection-status & compass in fullscreen for a cleaner map view;
+   they reappear on tap via the header interaction */
+.tracking-app.is-fullscreen .tracking-header {
+  padding-top: var(--spacing-md);
+}
+
+/* Ensure map tiles re-render smoothly */
+.tracking-app.is-fullscreen .tracking-map {
+  transition: none;
 }
 
 /* ========================================
